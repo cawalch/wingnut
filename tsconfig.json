@@ -6,8 +6,9 @@
     "outDir": "dist",
     "removeComments": false,
     "lib": ["es2019"],
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "skipLibCheck": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "src/test"]
 }

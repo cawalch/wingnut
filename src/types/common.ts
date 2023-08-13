@@ -1,6 +1,6 @@
 export type RequestLikeHandler = (
-  req: Record<string, any>,
-  res: unknown,
+  req: any,
+  res: any,
   next: () => void,
 ) => Promise<void> | void;
 
@@ -16,7 +16,7 @@ export type Router = {
 };
 
 export type ConnectLike = {
-  use: (path: string, router: Router) => void;
+  use: (path: string, router: any) => void;
   _router: {
     stack: any;
   };
