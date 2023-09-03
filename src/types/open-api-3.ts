@@ -1,4 +1,4 @@
-import { RequestLikeHandler } from "./common";
+import { RequestHandler } from "express";
 // open api 3 typings
 
 export type NamedHandler<S> = Record<
@@ -13,7 +13,7 @@ export interface AppObject {
     version: string;
     description: string;
   };
-  wrapper?: (cb: RequestLikeHandler) => RequestLikeHandler;
+  wrapper?: (cb: RequestHandler) => RequestHandler;
   paths: PathItem;
   components?: Components;
 }
@@ -51,7 +51,7 @@ export interface ScopeHandler {
 export type ScopeObject<S = string> = {
   auth: string;
   scopes: (keyof NamedHandler<S>)[];
-  middleware: RequestLikeHandler[];
+  middleware: RequestHandler[];
   responses?: MediaSchemaItem;
 };
 
@@ -117,8 +117,8 @@ export interface PathOperation {
   scope?: ScopeObject[];
   security?: SecurityObject;
   parameters?: Parameter[];
-  wrapper?: (cb: RequestLikeHandler) => RequestLikeHandler;
-  middleware: RequestLikeHandler[];
+  wrapper?: (cb: RequestHandler) => RequestHandler;
+  middleware: RequestHandler[];
 }
 
 export interface MediaSchemaItem {

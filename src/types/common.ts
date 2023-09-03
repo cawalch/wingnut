@@ -1,26 +1,7 @@
-export type RequestLikeHandler = (
-  req: any,
-  res: any,
-  next: () => void,
-) => Promise<void> | void;
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { RequestHandler } from "express";
 
-export type Route = (path: string, ...handler: RequestLikeHandler[]) => void;
-
-export type Router = {
-  get?: Route;
-  post?: Route;
-  put?: Route;
-  delete?: Route;
-  patch?: Route;
-  stack: any;
-};
-
-export type ConnectLike = {
-  use: (path: string, router: any) => void;
-  _router: {
-    stack: any;
-  };
-};
+export type Route = (path: string, ...handler: RequestHandler[]) => void;
 
 export type AjvErrorLikeObject = {
   propertyName?: string;

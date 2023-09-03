@@ -1,10 +1,15 @@
 import {
+  Express,
+  RequestHandler,
+  Request,
+  Response,
+  NextFunction,
+  Router,
+} from "express";
+import {
   AjvLike,
   AjvLikeSchemaObject,
   AjvLikeValidateFunction,
-  ConnectLike,
-  RequestLikeHandler,
-  Router,
 } from "../types/common";
 import {
   AppObject,
@@ -28,8 +33,8 @@ type ValidateByParam = Record<ParamIn, AjvLikeValidateFunction | undefined>;
 
 export interface Security<S = string> {
   name: string;
-  before?: RequestLikeHandler;
-  handler: RequestLikeHandler;
+  before?: RequestHandler;
+  handler: RequestHandler;
   scopes: NamedHandler<S>;
   responses?: MediaSchemaItem;
 }
@@ -72,12 +77,12 @@ export const validateBuilder =
   (
     s: Parameter[],
   ): {
-    handlers: RequestLikeHandler[];
+    handlers: RequestHandler[];
     schema: { [p: string]: AjvLikeSchemaObject };
   } => {
     const pIns = groupByParamIn(s);
     const ret: { [p: string]: AjvLikeSchemaObject } = {};
-    const handlers: RequestLikeHandler[] = [];
+    const handlers: RequestHandler[] = [];
     const validators: ValidateByParam = {
       path: undefined,
       query: undefined,
@@ -96,7 +101,7 @@ export const validateBuilder =
 
 export const validateHandler =
   (valid: AjvLikeValidateFunction, whereIn: ParamIn) =>
-  (req: Record<string, unknown>, _res: unknown, next: () => void) => {
+  (req: Request, _res: Response, next: NextFunction) => {
     if (!valid(req[whereIn])) {
       throw new ValidationError("WingnutValidationError", valid.errors);
     }
@@ -114,12 +119,12 @@ export const wingnut = (ajv: AjvLike, appRtr: Router) => {
       method,
     }: { pathOp: PathOperation; path: string; method: string },
   ) => {
-    let wrapper: (cb: RequestLikeHandler) => RequestLikeHandler = (cb) => cb;
+    let wrapper: (cb: RequestHandler) => RequestHandler = (cb) => cb;
     if (pathOp.wrapper) {
       wrapper = pathOp.wrapper;
     }
 
-    const middle: RequestLikeHandler[] = [];
+    const middle: RequestHandler[] = [];
 
     // security handler
     if (pathOp.scope) {
@@ -169,7 +174,7 @@ export const wingnut = (ajv: AjvLike, appRtr: Router) => {
 
   const Controller =
     (ctrl: { prefix: string; route: typeof Route }) =>
-    (app: ConnectLike): PathItem[] => {
+    (app: Express): PathItem[] => {
       const paths = ctrl.route(appRtr);
       app.use(ctrl.prefix, paths.router);
       if (!Array.isArray(paths.paths)) {
@@ -188,7 +193,7 @@ export const wingnut = (ajv: AjvLike, appRtr: Router) => {
     };
 
   const Paths = (
-    app: ConnectLike,
+    app: Express,
     ...ctrls: ReturnType<typeof Controller>[]
   ): PathItem => {
     const paths = ctrls.reduce(
@@ -225,18 +230,20 @@ export const Path = (path: string, ...po: PathObject[]): PathItem => ({
 });
 
 export const AsyncMethod =
-  (m: string, wrapper: (cb: RequestLikeHandler) => RequestLikeHandler) =>
+  (m: string, wrapper: (cb: AsyncRequestHandler) => RequestHandler) =>
   (pop: PathOperation): PathObject => ({
     [m]: { wrapper, ...pop },
   });
 
+type AsyncRequestHandler = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => Promise<void>;
+
 export const AsyncWrapper =
-  (cb: RequestLikeHandler) =>
-  async (
-    req: Record<string, unknown>,
-    res: unknown,
-    next: (error?: any) => void,
-  ): Promise<void> => {
+  (cb: AsyncRequestHandler) =>
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       await cb(req, res, next);
     } catch (e) {
@@ -251,8 +258,8 @@ export const Method =
   });
 
 export const ScopeWrapper =
-  (cb: RequestLikeHandler, scopes: ScopeHandler[]) =>
-  (req: Record<string, unknown>, res: unknown, next: () => void) => {
+  (cb: RequestHandler, scopes: ScopeHandler[]) =>
+  (req: Request, res: Response, next: NextFunction) => {
     if (scopes.some((v) => v(req, res, next))) {
       next();
       return;
