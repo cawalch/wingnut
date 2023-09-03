@@ -2,6 +2,8 @@
 
 A node.js library to build express.js APIs using [OpenAPI V3 specs](https://swagger.io/specification/) for validation and documentation.
 
+[![npm version](https://badge.fury.io/js/wingnut.svg)](https://badge.fury.io/js/wingnut)
+
 ## Installation
 
 Install wingnut using `npm i wingnut`, or `pnpm i wingnut`, or `yarn i wingnut`.
