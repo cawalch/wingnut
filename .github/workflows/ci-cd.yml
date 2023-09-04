@@ -42,7 +42,8 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Publish to npm
+        if: github.event_name == 'push'
         uses: JS-DevTools/npm-publish@v2
         with:
-          check-version: true
+          strategy: upgrade
           token: ${{ secrets.NPM_TOKEN }}
