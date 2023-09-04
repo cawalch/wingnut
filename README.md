@@ -295,7 +295,7 @@ const { Route, Paths, Controller } = wingnut(ajv, router)
 
 const app = express()
 
-const apis = (app: Express) => {
+export const apis = (app: Express) => {
   const openApiPaths = Paths(
     app,
     Controller({
@@ -307,5 +307,9 @@ const apis = (app: Express) => {
   // serve swagger documentation at /api-docs
   app.use('/api-docs', swaggerUI.serve, swaggerUI.setup(swaggerDoc))
 }
+
+// app.ts
+apis(app)
+app.listen(3000)
 
 ```
