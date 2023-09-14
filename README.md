@@ -116,7 +116,7 @@ Post({
     description: "Create a log entry",
     content: {
       "application/json": {
-        schmae: {
+        schema: {
           type: "object",
           properties: {
             log: {
