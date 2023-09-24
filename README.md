@@ -22,7 +22,7 @@ import Ajv from 'ajv';
 
 import { PathItem, wingnut } from 'wingnut';`
 
-const { Route, Paths, Controller } = wingunut(ajv, router)
+const { route, paths, controller } = wingunut(ajv, router)
 
 const app: Express = express();
 
@@ -52,7 +52,7 @@ const logListController = Get({
   description: "List all logs",
   parameters: [
     // query parameter validation
-    QueryParam({
+    queryParam({
       name: "limit",
       description: "Number of logs to return",
       schema: {
@@ -78,12 +78,12 @@ const logListController = Get({
 })
 
 // similar to app.use(apis)
-Paths(
+paths(
   app,
-  Controller({
+  controller({
     // map the above handler to /api/logs
     prefix: "/api/logs",
-    route: (router: Router) => Route(
+    route: (router: Router) => route(
       Path(
         "/",
         logListController
@@ -97,7 +97,7 @@ Paths(
 
 ```typescript
 // Validate `limit` against `req.query`
-Query({
+queryParam({
   name: "limit",
   description: "max number",
   schema: {
@@ -111,7 +111,7 @@ Query({
 
 ```typescript
 // Validate `body` against `req.body`
-Post({
+postMethod({
   requestBody: {
     description: "Create a log entry",
     content: {
@@ -141,7 +141,7 @@ Post({
 
 ```typescript
 // Validate `id` against `req.params`
-PathParam({
+pathParam({
   name: "id",
   description: "log id",
   schema: {
@@ -154,10 +154,10 @@ PathParam({
 ## Secure Routes with Scopes
 
 ```typescript
-import { Scope, Security, AuthPathOp, ScopeHandler } from "wingnut";
+import { scope, Security, authPathOp, ScopeHandler } from "wingnut";
 
 // Build a scope handler to evaluate the user context (session)
-const UserLevelAuth =
+const userLevelAuth =
   (minLevel: number): ScopeHandler =>
   (req: UserAuth): boolean =>
     (req.user?.level ?? 0) >= minLevel;
@@ -172,8 +172,8 @@ const auth: Security = {
   scopes: {
     // define OpenAPI security scopes based on user levels
     // these can be referenced with wingunut's Scope
-    admin: UserLeveltAuth(100),
-    user: UserLevelAuth(10),
+    admin: userLeveltAuth(100),
+    user: userLevelAuth(10),
   },
   // response schema for authorization failure
   responses: {
@@ -184,7 +184,7 @@ const auth: Security = {
 };
 
 // reusable scope handler to secure admin-only routes
-const AdminAuth = AuthPathOp(Scope(auth, "admin"));
+const adminAuth = authPathOp(Scope(auth, "admin"));
 
 // possible user update schema
 const updateUserSchema = {
@@ -205,8 +205,8 @@ const updateUserSchema = {
 };
 
 // perform authorization using AdminAuth before updating
-const editUserAPI = AdminAuth(
-  Put({
+const editUserAPI = adminAuth(
+  putMethod({
     description: "Edit a user",
     requestBody: {
       description: "user attributes to edit",
@@ -291,14 +291,14 @@ const swaggerPath = (paths: PathItem) => ({
   paths;
 })
 
-const { Route, Paths, Controller } = wingnut(ajv, router)
+const { route, paths, controller } = wingnut(ajv, router)
 
 const app = express()
 
 export const apis = (app: Express) => {
-  const openApiPaths = Paths(
+  const openApiPaths = paths(
     app,
-    Controller({
+    controller({
       // map the above handler to /api/logs
     })
   )

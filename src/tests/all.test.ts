@@ -14,18 +14,18 @@ import {
   groupByParamIn,
   validateParams,
   validateBuilder,
-  Post,
-  Get,
-  QueryParam,
-  AuthPathOp,
+  postMethod,
+  getMethod,
+  queryParam,
+  authPathOp,
   Security,
-  Scope,
-  ScopeWrapper,
-  AsyncGet,
+  scope,
+  scopeWrapper,
+  asyncGetMethod,
 } from "../lib/index";
 import { AjvLike } from "../types/common";
 import { Request } from "express";
-import { wingnut, Path } from "../lib";
+import { wingnut, path } from "../lib";
 import { ValidationError } from "../lib/errors";
 
 function createParameter(
@@ -132,16 +132,16 @@ ajv.opts.coerceTypes = true;
 describe("integration tests", () => {
   it("should validate request params", async () => {
     const router = express.Router();
-    const { Route, Paths, Controller } = wingnut(ajv, router);
+    const { route, paths, controller } = wingnut(ajv, router);
     const userHandler = (req: Request, res: Response, next: NextFunction) => {
       res.status(200).json(req.params);
       next();
     };
-    const createUserHandler = Path(
+    const createUserHandler = path(
       "/users",
-      Get({
+      getMethod({
         parameters: [
-          QueryParam({
+          queryParam({
             name: "limit",
             description: "max number of users",
             schema: {
@@ -155,11 +155,11 @@ describe("integration tests", () => {
     );
     const app = express();
     app.use(express.json());
-    Paths(
+    paths(
       app,
-      Controller({
+      controller({
         prefix: "/api",
-        route: (router: Router) => Route(router, createUserHandler),
+        route: (router: Router) => route(router, createUserHandler),
       }),
     );
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -182,14 +182,14 @@ describe("integration tests", () => {
 
   it("should validate request body", async () => {
     const router = express.Router();
-    const { Route, Paths, Controller } = wingnut(ajv, router);
+    const { route, paths, controller } = wingnut(ajv, router);
     const userHandler = (req: Request, res: Response, next: NextFunction) => {
       res.status(200).json(req.body);
       next();
     };
-    const createUserHandler = Path(
+    const createUserHandler = path(
       "/users",
-      Post({
+      postMethod({
         requestBody: {
           description: "Create a user",
           content: {
@@ -211,11 +211,11 @@ describe("integration tests", () => {
     );
     const app = express();
     app.use(express.json());
-    Paths(
+    paths(
       app,
-      Controller({
+      controller({
         prefix: "/api",
-        route: (router: Router) => Route(router, createUserHandler),
+        route: (router: Router) => route(router, createUserHandler),
       }),
     );
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -244,15 +244,15 @@ describe("integration tests", () => {
     });
     const app = express();
     const router = express.Router();
-    const { Route, Paths, Controller } = wingnut(ajv, router);
-    const duplicateController = Controller({
+    const { route, paths, controller } = wingnut(ajv, router);
+    const duplicateController = controller({
       prefix: "/api",
       route: (router: Router) =>
-        Route(
+        route(
           router,
-          Path(
+          path(
             "/users",
-            Get({
+            getMethod({
               middleware: [
                 (_req: Request, res: Response, next: NextFunction) => {
                   res.status(200).send("hello");
@@ -263,7 +263,7 @@ describe("integration tests", () => {
           ),
         ),
     });
-    Paths(app, duplicateController, duplicateController);
+    paths(app, duplicateController, duplicateController);
     expect(consoleSpyWarn).toHaveBeenCalledWith(
       "WingnutWarning: get /api/users already exists",
     );
@@ -301,9 +301,9 @@ describe("Security Schema", () => {
       },
     };
 
-    const AdminAuth = AuthPathOp(Scope(auth, "admin"));
-    const actual = AdminAuth(
-      Get({
+    const adminAuth = authPathOp(scope(auth, "admin"));
+    const actual = adminAuth(
+      getMethod({
         middleware: [routeHandler],
         responses: {
           "200": {
@@ -346,13 +346,13 @@ describe("Security Schema", () => {
         },
       },
     };
-    const AdminAuth = AuthPathOp(Scope(auth, "admin"));
+    const adminAuth = authPathOp(scope(auth, "admin"));
     const router = express.Router();
-    const { Route, Paths, Controller } = wingnut(ajv, router);
-    const handler = Path(
+    const { route, paths, controller } = wingnut(ajv, router);
+    const handler = path(
       "/users",
-      AdminAuth(
-        AsyncGet({
+      adminAuth(
+        asyncGetMethod({
           middleware: [routeHandler],
           responses: {
             "200": {
@@ -364,11 +364,11 @@ describe("Security Schema", () => {
     );
     const app = express();
     app.use(express.json());
-    Paths(
+    paths(
       app,
-      Controller({
+      controller({
         prefix: "/api",
-        route: (router: Router) => Route(router, handler),
+        route: (router: Router) => route(router, handler),
       }),
     );
     await request(app).get("/api/users");
@@ -391,14 +391,14 @@ describe("ScopeWrapper", () => {
 
   it("should call next() when a scope passes its test", () => {
     const scopes = [() => false, () => true];
-    ScopeWrapper(cb, scopes)(req, res, next);
+    scopeWrapper(cb, scopes)(req, res, next);
     expect(next).toHaveBeenCalledTimes(1);
     expect(cb).not.toHaveBeenCalled();
   });
 
   it("should call cb when no scope passes its test", () => {
     const scopes = [() => false, () => false];
-    ScopeWrapper(cb, scopes)(req, res, next);
+    scopeWrapper(cb, scopes)(req, res, next);
     expect(cb).toHaveBeenCalledTimes(1);
     expect(next).not.toHaveBeenCalled();
   });
