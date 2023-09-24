@@ -39,7 +39,7 @@ export interface Security<S = string> {
   responses?: MediaSchemaItem;
 }
 
-export const App = (a: AppObject): AppObject => a;
+export const app = (a: AppObject): AppObject => a;
 
 export const groupByParamIn = (params: Parameter[]) =>
   params.reduce(
@@ -156,7 +156,7 @@ export const wingnut = (ajv: AjvLike, appRtr: Router) => {
     urtr[method](path, ...middle);
   };
 
-  const Route = (rtr: Router, ...pitems: PathItem[]): AppRoute => ({
+  const route = (rtr: Router, ...pitems: PathItem[]): AppRoute => ({
     paths: pitems,
     router: pitems.reduce((urtr, pitem) => {
       Object.keys(pitem).forEach((path: string) => {
@@ -172,8 +172,8 @@ export const wingnut = (ajv: AjvLike, appRtr: Router) => {
     }, rtr),
   });
 
-  const Controller =
-    (ctrl: { prefix: string; route: typeof Route }) =>
+  const controller =
+    (ctrl: { prefix: string; route: typeof route }) =>
     (app: Express): PathItem[] => {
       const paths = ctrl.route(appRtr);
       app.use(ctrl.prefix, paths.router);
@@ -192,9 +192,9 @@ export const wingnut = (ajv: AjvLike, appRtr: Router) => {
       return paths.paths;
     };
 
-  const Paths = (
+  const paths = (
     app: Express,
-    ...ctrls: ReturnType<typeof Controller>[]
+    ...ctrls: ReturnType<typeof controller>[]
   ): PathItem => {
     const paths = ctrls.reduce(
       (acc, c) => {
@@ -219,17 +219,17 @@ export const wingnut = (ajv: AjvLike, appRtr: Router) => {
 
   return {
     validate,
-    Route,
-    Paths,
-    Controller,
+    route,
+    paths,
+    controller,
   };
 };
 
-export const Path = (path: string, ...po: PathObject[]): PathItem => ({
+export const path = (path: string, ...po: PathObject[]): PathItem => ({
   [path]: po.reduce((acc, p) => ({ ...acc, ...p }), {}),
 });
 
-export const AsyncMethod =
+export const asyncMethod =
   (m: string, wrapper: (cb: AsyncRequestHandler) => RequestHandler) =>
   (pop: PathOperation): PathObject => ({
     [m]: { wrapper, ...pop },
@@ -241,7 +241,7 @@ type AsyncRequestHandler = (
   next: NextFunction,
 ) => Promise<void>;
 
-export const AsyncWrapper =
+export const asyncWrapper =
   (cb: AsyncRequestHandler) =>
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -251,13 +251,13 @@ export const AsyncWrapper =
     }
   };
 
-export const Method =
+export const method =
   (m: string) =>
   (pop: PathOperation): PathObject => ({
     [m]: pop,
   });
 
-export const ScopeWrapper =
+export const scopeWrapper =
   (cb: RequestHandler, scopes: ScopeHandler[]) =>
   (req: Request, res: Response, next: NextFunction) => {
     if (scopes.some((v) => v(req, res, next))) {
@@ -268,7 +268,7 @@ export const ScopeWrapper =
     }
   };
 
-export const Scope = <T = string>(
+export const scope = <T = string>(
   security: Security<T>,
   ...scopes: (keyof NamedHandler<T>)[]
 ): ScopeObject => ({
@@ -276,7 +276,7 @@ export const Scope = <T = string>(
   scopes,
   middleware: [
     ...(security.before ? [security.before] : []),
-    ScopeWrapper(
+    scopeWrapper(
       security.handler,
       scopes.map((s) => security.scopes[s]),
     ),
@@ -284,7 +284,7 @@ export const Scope = <T = string>(
   responses: security.responses,
 });
 
-export const AuthPathOp =
+export const authPathOp =
   (scope: ScopeObject) =>
   (pop: PathObject): PathObject => {
     const [m] = Object.keys(pop);
@@ -296,29 +296,29 @@ export const AuthPathOp =
     return { [m]: ret };
   };
 
-export const Param =
+export const param =
   (pin: ParamIn) =>
   (param: Omit<Parameter, "in">): Parameter => ({
     in: pin,
     ...param,
   });
 
-export const Integer = (sch: Partial<ParamSchema>): ParamSchema => ({
+export const integer = (sch: Partial<ParamSchema>): ParamSchema => ({
   type: "integer",
   ...sch,
 });
 
-export const QueryParam = Param("query");
-export const PathParam = Param("path");
-export const Get = Method("get");
-export const Post = Method("post");
-export const Put = Method("put");
-export const Delete = Method("delete");
-export const AsyncGet = AsyncMethod("get", AsyncWrapper);
+export const queryParam = param("query");
+export const pathParam = param("path");
+export const getMethod = method("get");
+export const postMethod = method("post");
+export const putMethod = method("put");
+export const deleteMethod = method("delete");
+export const asyncGetMethod = asyncMethod("get", asyncWrapper);
 
-export const AsyncPost = AsyncMethod("post", AsyncWrapper);
-export const AsyncPut = AsyncMethod("put", AsyncWrapper);
-export const AsyncDelete = AsyncMethod("delete", AsyncWrapper);
+export const asyncPostMethod = asyncMethod("post", asyncWrapper);
+export const asyncPutMethod = asyncMethod("put", asyncWrapper);
+export const asyncDeleteMethod = asyncMethod("delete", asyncWrapper);
 
 type WnNumberType = "integer" | "int32" | "int8" | "number";
 
