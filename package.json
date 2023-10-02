@@ -1,9 +1,10 @@
 {
   "name": "wingnut",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "API validation middleware builder based on Open API V3 specs",
   "main": "./dist/index.js",
   "scripts": {
+    "prepublish": "pnpm build",
     "test": "vitest",
     "preinstall": "npx only-allow pnpm",
     "coverage": "vitest run --coverage",
