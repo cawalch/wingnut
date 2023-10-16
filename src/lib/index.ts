@@ -108,7 +108,7 @@ export const validateHandler =
     next();
   };
 
-export const wingnut = (ajv: AjvLike, appRtr: Router) => {
+export const wingnut = (ajv: AjvLike) => {
   const validate = validateBuilder(ajv);
 
   const mapRouter = (
@@ -175,7 +175,7 @@ export const wingnut = (ajv: AjvLike, appRtr: Router) => {
   const controller =
     (ctrl: { prefix: string; route: typeof route }) =>
     (app: Express): PathItem[] => {
-      const paths = ctrl.route(appRtr);
+      const paths = ctrl.route(Router());
       app.use(ctrl.prefix, paths.router);
       if (!Array.isArray(paths.paths)) {
         throw new Error('WingnutError: "paths" must be an array');
