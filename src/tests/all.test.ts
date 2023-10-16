@@ -131,8 +131,7 @@ ajv.opts.coerceTypes = true;
 
 describe("integration tests", () => {
   it("should validate request params", async () => {
-    const router = express.Router();
-    const { route, paths, controller } = wingnut(ajv, router);
+    const { route, paths, controller } = wingnut(ajv);
     const userHandler = (req: Request, res: Response, next: NextFunction) => {
       res.status(200).json(req.params);
       next();
@@ -181,8 +180,7 @@ describe("integration tests", () => {
   });
 
   it("should validate request body", async () => {
-    const router = express.Router();
-    const { route, paths, controller } = wingnut(ajv, router);
+    const { route, paths, controller } = wingnut(ajv);
     const userHandler = (req: Request, res: Response, next: NextFunction) => {
       res.status(200).json(req.body);
       next();
@@ -243,8 +241,7 @@ describe("integration tests", () => {
       return;
     });
     const app = express();
-    const router = express.Router();
-    const { route, paths, controller } = wingnut(ajv, router);
+    const { route, paths, controller } = wingnut(ajv);
     const duplicateController = controller({
       prefix: "/api",
       route: (router: Router) =>
@@ -347,8 +344,7 @@ describe("Security Schema", () => {
       },
     };
     const adminAuth = authPathOp(scope(auth, "admin"));
-    const router = express.Router();
-    const { route, paths, controller } = wingnut(ajv, router);
+    const { route, paths, controller } = wingnut(ajv);
     const handler = path(
       "/users",
       adminAuth(
