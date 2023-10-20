@@ -1,4 +1,4 @@
-import { RequestHandler } from "express";
+import { Request, RequestHandler, Response } from "express";
 // open api 3 typings
 
 export type NamedHandler<S> = Record<
@@ -45,7 +45,7 @@ export type SecurityObject = {
 }[];
 
 export interface ScopeHandler {
-  (req: unknown, res: unknown, next?: () => void): boolean;
+  (req: Request, res: Response, next?: () => void): boolean;
 }
 
 export type ScopeObject<S = string> = {
