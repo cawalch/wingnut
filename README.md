@@ -47,7 +47,7 @@ const logResponseSchema = {
   }
 }
 
-const logListController = Get({
+const logListController = getMethod({
   tags: ["logs"],
   description: "List all logs",
   parameters: [
@@ -258,7 +258,7 @@ type ListRequest = Request<
 >;
 
 // Request Handler
-const ListLogsHandler = (
+const listLogsHandler = (
   req: ListRequest,
   res: Response,
   next: NextFunction,
