@@ -156,6 +156,26 @@ export const wingnut = (ajv: AjvLike) => {
     urtr[method](path, ...middle);
   };
 
+  /**
+   * route
+   *
+   * Map an Express route to one or more Paths
+   *
+   * ```typescript
+   * // returns router and PathItems for swagger docs
+   * const { router, pathItems } = route(
+   *  express.Router(),
+   *  path(
+   *    '/users',
+   *    getMethod({
+   *       middleware: [
+   *        // express HTTP handler
+   *       ]
+   *    })
+   *    )
+   *  )
+   * ```
+   */
   const route = (rtr: Router, ...pitems: PathItem[]): AppRoute => ({
     paths: pitems,
     router: pitems.reduce((urtr, pitem) => {
@@ -172,6 +192,22 @@ export const wingnut = (ajv: AjvLike) => {
     }, rtr),
   });
 
+  /**
+   * controller
+   *
+   * Creates a new controller with a path prefix
+   *
+   * ```typescript
+   *
+   * import logsController from './logs'
+   *
+   * // map controller and path prefix
+   * controller({
+   *   prefix: '/api/logs',
+   *   route: logsController
+   * })
+   * ```
+   */
   const controller =
     (ctrl: { prefix: string; route: typeof route }) =>
     (app: Express): PathItem[] => {
@@ -192,6 +228,23 @@ export const wingnut = (ajv: AjvLike) => {
       return paths.paths;
     };
 
+  /**
+   * paths
+   *
+   * Define path endpoints with Express
+   * app context
+   *
+   * ```typescript
+   * paths(
+   *  // express app
+   *  app,
+   *  controller({
+   *    prefix: '/api/logs',
+   *    route: logsController
+   *  })
+   * )
+   * ```
+   */
   const paths = (
     app: Express,
     ...ctrls: ReturnType<typeof controller>[]
@@ -257,6 +310,12 @@ export const method =
     [m]: pop,
   });
 
+/**
+ * scopeWrapper
+ *
+ * Wraps Express RequestHandler's inside scoped middleware.
+ * Used to create middleware that maps to Security scopes.
+ */
 export const scopeWrapper =
   (cb: RequestHandler, scopes: ScopeHandler[]) =>
   (req: Request, res: Response, next: NextFunction) => {
@@ -268,6 +327,47 @@ export const scopeWrapper =
     }
   };
 
+/**
+ * scope
+ *
+ * Create a user security scope
+ *
+ * ```typescript
+ * import { Request, Response } from 'express'
+ *
+ * // user session interface
+ * interface UserAuth extends Request {
+ *    user?: {
+ *      level: number
+ *    }
+ * }
+ *
+ * // authorization middleware based on user level
+ * const userLevel = (minLevel: number): ScopeHandler => (
+ *    req: UserAuth
+ * ): boolean => req.user.level > minLevel
+ *
+ * const auth: Security = {
+ *  name: 'auth',
+ *  handler: (_req: Request, res: Response) => {
+ *    // unauthorized handler
+ *    res.status(400).send('Not Auth')
+ *  },
+ *  scopes: {
+ *    admin: userLevel(100),
+ *    moderator: userLevel(50)
+ *  },
+ *  responses: {
+ *  '400': {
+ *    description: 'Not Auth'
+ *   }
+ *  }
+ * }
+ *
+ * // build admin authorization middleware
+ * const adminAuth = authPathOp(scope(auth, 'admin'))
+ * ```
+ */
 export const scope = <T = string>(
   security: Security<T>,
   ...scopes: (keyof NamedHandler<T>)[]
@@ -284,6 +384,25 @@ export const scope = <T = string>(
   responses: security.responses,
 });
 
+/**
+ * authPathOp
+ *
+ * Authorization middleware builder.
+ *
+ * ```typescript
+ * // create admin authorization middleware guard
+ * const adminAuth = authPathOp(scope(auth, 'admin'))
+ *
+ * // secure route with admin authorization
+ * adminAuth(
+ *  getMethod({
+ *    middleware: [
+ *      // express HTTP handler
+ *    ]
+ *  })
+ * )
+ * ```
+ */
 export const authPathOp =
   (scope: ScopeObject) =>
   (pop: PathObject): PathObject => {
@@ -308,7 +427,50 @@ export const integer = (sch: Partial<ParamSchema>): ParamSchema => ({
   ...sch,
 });
 
+/**
+ * queryParam
+ *
+ * OpenAPI3 QueryParam Schema builder
+ *
+ * ```typescript
+ * getMethod({
+ *   parameters: [
+ *     // accept `/path?limit=<number>`
+ *     queryParam({
+ *        name: 'limit',
+ *        description: 'max number',
+ *        schema: {
+ *          type: 'integer',
+ *          minimum: 1,
+ *        },
+ *     })
+ *   ]
+ * })
+ * ```
+ */
 export const queryParam = param("query");
+
+/**
+ * pathParam
+ *
+ * OpenAPI3 PathParam Schema builder
+ *
+ * ```typescript
+ * putMethod({
+ *  parameters: [
+ *    // accept `/path/:id` where `:id` is in uuidv4 format
+ *    pathParam({
+ *      name: 'id',
+ *      description: 'user id',
+ *      schema: {
+ *        type: 'string',
+ *        format: 'uuidv4'
+ *      }
+ *    })
+ *  ]
+ * })
+ * ```
+ */
 export const pathParam = param("path");
 export const getMethod = method("get");
 export const postMethod = method("post");
