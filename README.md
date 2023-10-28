@@ -22,7 +22,7 @@ import Ajv from 'ajv';
 
 import { PathItem, wingnut } from 'wingnut';`
 
-const { route, paths, controller } = wingunut(ajv, router)
+const { route, paths, controller } = wingnut(ajv)
 
 const app: Express = express();
 
@@ -291,7 +291,7 @@ const swaggerPath = (paths: PathItem) => ({
   paths;
 })
 
-const { route, paths, controller } = wingnut(ajv, router)
+const { route, paths, controller } = wingnut(ajv)
 
 const app = express()
 
