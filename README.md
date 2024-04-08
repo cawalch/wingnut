@@ -17,35 +17,34 @@ Install wingnut using `npm i wingnut`, or `pnpm i wingnut`, or `yarn i wingnut`.
 ## Usage
 
 ```typescript
-import express, { Express, Router } from "express";
-import Ajv from 'ajv';
+import express, { Express, Router, Request, Response } from "express";
+import Ajv from "ajv";
 
-import { PathItem, wingnut } from 'wingnut';`
+import { wingnut, queryParam, getMethod, path, ParamSchema } from "wingnut";
 
-const { route, paths, controller } = wingnut(ajv)
+const ajv = new Ajv();
+
+const { route, paths, controller } = wingnut(ajv);
 
 const app: Express = express();
 
-const logListHandler = (req, res, next) => {
+const logListHandler = (_req: Request, res: Response) => {
   res.status(200).json({
-    logs: [
-      "log1",
-      "log2",
-    ]
-  })
-}
+    logs: ["log1", "log2"],
+  });
+};
 
-const logResponseSchema = {
+const logResponseSchema: ParamSchema = {
   type: "object",
   properties: {
     logs: {
       type: "array",
       items: {
-        type: "string"
-      }
-    }
-  }
-}
+        type: "string",
+      },
+    },
+  },
+};
 
 const logListController = getMethod({
   tags: ["logs"],
@@ -58,24 +57,22 @@ const logListController = getMethod({
       schema: {
         type: "integer",
         minimum: 1,
-        maximum: 100
-      }
-    })
+        maximum: 100,
+      },
+    }),
   ],
-  middleware: [
-    logListHandler
-  ],
+  middleware: [logListHandler],
   responses: {
     200: {
       description: "Logs",
       content: {
         "application/json": {
-          schema: logResponseSchema
-        }
-      }
-    }
-  }
-})
+          schema: logResponseSchema,
+        },
+      },
+    },
+  },
+});
 
 // similar to app.use(apis)
 paths(
@@ -83,14 +80,13 @@ paths(
   controller({
     // map the above handler to /api/logs
     prefix: "/api/logs",
-    route: (router: Router) => route(
-      Path(
-        "/",
-        logListController
-      )
-    )
-  })
-)
+    route: (router: Router) => route(router, path("/", logListController)),
+  }),
+);
+
+app.listen(3000, () => {
+  console.log("Server started on port 3000");
+});
 ```
 
 ## Query Params
