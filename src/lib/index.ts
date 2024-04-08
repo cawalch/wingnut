@@ -136,7 +136,9 @@ export const wingnut = (ajv: AjvLike) => {
     }
 
     if (pathOp.requestBody?.content !== undefined) {
-      const content = pathOp.requestBody.content["application/json"];
+      const content =
+        pathOp.requestBody.content["application/json"] ||
+        pathOp.requestBody.content["application/x-www-form-urlencoded"];
       if (content) {
         const handler = validateHandler(ajv.compile(content.schema), "body");
         middle.push(wrapper(handler));
@@ -489,45 +491,51 @@ type WnTDataDef<S, D extends Record<string, unknown>> = S extends {
 }
   ? number
   : S extends { type: "boolean" }
-  ? boolean
-  : S extends { type: "timestamp" }
-  ? string | Date
-  : S extends { type: "array"; items: { type: string } }
-  ? WnTDataDef<S["items"], D>[]
-  : S extends { type: "string"; enum: readonly (infer E)[] }
-  ? string extends E
-    ? never
-    : [E] extends [string]
-    ? E
-    : never
-  : S extends { elements: infer E }
-  ? WnTDataDef<E, D>[]
-  : S extends { type: "string" }
-  ? string
-  : S extends {
-      properties: Record<string, unknown>;
-      required?: readonly string[];
-      additionalProperties?: boolean;
-    }
-  ? {
-      -readonly [K in keyof S["properties"]]?: WnTDataDef<
-        S["properties"][K],
-        D
-      >;
-    } & {
-      -readonly [K in S["required"][number]]: WnTDataDef<S["properties"][K], D>;
-    } & ([S["additionalProperties"]] extends [true]
-        ? Record<string, unknown>
-        : unknown)
-  : S extends { name: string; schema: Record<string, unknown> }
-  ? {
-      -readonly [K in S["name"]]: WnTDataDef<S["schema"], D>;
-    }
-  : S extends { description: string; schema: Record<string, unknown> }
-  ? WnDataType<S["schema"]>
-  : S extends { type: "object" }
-  ? Record<string, unknown>
-  : null;
+    ? boolean
+    : S extends { type: "timestamp" }
+      ? string | Date
+      : S extends { type: "array"; items: { type: string } }
+        ? WnTDataDef<S["items"], D>[]
+        : S extends { type: "string"; enum: readonly (infer E)[] }
+          ? string extends E
+            ? never
+            : [E] extends [string]
+              ? E
+              : never
+          : S extends { elements: infer E }
+            ? WnTDataDef<E, D>[]
+            : S extends { type: "string" }
+              ? string
+              : S extends {
+                    properties: Record<string, unknown>;
+                    required?: readonly string[];
+                    additionalProperties?: boolean;
+                  }
+                ? {
+                    -readonly [K in keyof S["properties"]]?: WnTDataDef<
+                      S["properties"][K],
+                      D
+                    >;
+                  } & {
+                    -readonly [K in S["required"][number]]: WnTDataDef<
+                      S["properties"][K],
+                      D
+                    >;
+                  } & ([S["additionalProperties"]] extends [true]
+                      ? Record<string, unknown>
+                      : unknown)
+                : S extends { name: string; schema: Record<string, unknown> }
+                  ? {
+                      -readonly [K in S["name"]]: WnTDataDef<S["schema"], D>;
+                    }
+                  : S extends {
+                        description: string;
+                        schema: Record<string, unknown>;
+                      }
+                    ? WnDataType<S["schema"]>
+                    : S extends { type: "object" }
+                      ? Record<string, unknown>
+                      : null;
 
 export type WnDataType<S> = WnTDataDef<S, Record<string, never>>;
 
