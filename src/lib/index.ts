@@ -212,9 +212,9 @@ export const wingnut = (ajv: AjvLike) => {
    */
   const controller =
     (ctrl: { prefix: string; route: typeof route }) =>
-    (app: Express): PathItem[] => {
+    (router: Router): PathItem[] => {
       const paths = ctrl.route(Router());
-      app.use(ctrl.prefix, paths.router);
+      router.use(ctrl.prefix, paths.router);
       if (!Array.isArray(paths.paths)) {
         throw new Error('WingnutError: "paths" must be an array');
       }
