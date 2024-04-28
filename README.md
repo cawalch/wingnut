@@ -149,26 +149,29 @@ pathParam({
 
 ## Secure Routes with Scopes
 
-```typescript
-import { scope, Security, authPathOp, ScopeHandler } from "wingnut";
+````typescript
+import {Request, Response} from "express";
+import {scope, Security, authPathOp, ScopeHandler, putMethod, ParamSchema} from "wingnut";
+
+interface UserAuth extends Request {user?: {level: number}};
 
 // Build a scope handler to evaluate the user context (session)
 const userLevelAuth =
   (minLevel: number): ScopeHandler =>
-  (req: UserAuth): boolean =>
-    (req.user?.level ?? 0) >= minLevel;
+    (req: UserAuth): boolean =>
+      (req.user?.level ?? 0) >= minLevel;
 
 // Build Authorization Security object
 const auth: Security = {
   name: "user level authorization",
   // handler if user is not authenticated
-  handler: (_req: Request, res: Response, next: NextFunction) => {
+  handler: (_req: Request, res: Response) => {
     res.status(400).send("Not Authorized");
   },
   scopes: {
     // define OpenAPI security scopes based on user levels
     // these can be referenced with wingunut's Scope
-    admin: userLeveltAuth(100),
+    admin: userLevelAuth(100),
     user: userLevelAuth(10),
   },
   // response schema for authorization failure
@@ -180,10 +183,10 @@ const auth: Security = {
 };
 
 // reusable scope handler to secure admin-only routes
-const adminAuth = authPathOp(Scope(auth, "admin"));
+const adminAuth = authPathOp(scope(auth, "admin"));
 
 // possible user update schema
-const updateUserSchema = {
+const updateUserSchema: ParamSchema = {
   type: "object",
   properties: {
     user: {
@@ -216,8 +219,7 @@ const editUserAPI = adminAuth(
       // express.js RequestHandler requires admin authentication now
     ],
   }),
-);
-```
+);```
 
 ## Type-Safe Request Values
 
@@ -263,7 +265,7 @@ const listLogsHandler = (
   const { limit, filter } = req.query;
   // ...
 };
-```
+````
 
 ### Swagger Documentation
 
