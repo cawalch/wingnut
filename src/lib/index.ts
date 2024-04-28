@@ -1,5 +1,4 @@
 import {
-  Express,
   RequestHandler,
   Request,
   Response,
@@ -248,12 +247,12 @@ export const wingnut = (ajv: AjvLike) => {
    * ```
    */
   const paths = (
-    app: Express,
+    router: Router,
     ...ctrls: ReturnType<typeof controller>[]
   ): PathItem => {
     const paths = ctrls.reduce(
       (acc, c) => {
-        const paths = c(app);
+        const paths = c(router);
         paths.forEach((p) => {
           const [path] = Object.keys(p);
           const [method] = Object.keys(p[path]);
