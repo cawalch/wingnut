@@ -1,6 +1,6 @@
 {
   "name": "wingnut",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "API validation middleware builder based on Open API V3 specs",
   "main": "./dist/index.js",
   "scripts": {
@@ -8,7 +8,7 @@
     "test": "vitest",
     "preinstall": "npx only-allow pnpm",
     "coverage": "vitest run --coverage",
-    "build": "tsc --declaration",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node14 --outdir=dist --packages=external && tsc --project tsconfig.build.json",
     "lint": "eslint . --ext .ts"
   },
   "author": "cawalch@pm.me",
@@ -60,5 +60,8 @@
   "homepage": "https://github.com/cawalch/wingnut#readme",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"
+  },
+  "dependencies": {
+    "esbuild": "^0.20.2"
   }
 }
