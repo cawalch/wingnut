@@ -149,7 +149,7 @@ pathParam({
 
 ## Secure Routes with Scopes
 
-````typescript
+```typescript
 import {Request, Response} from "express";
 import {scope, Security, authPathOp, ScopeHandler, putMethod, ParamSchema} from "wingnut";
 
@@ -219,7 +219,8 @@ const editUserAPI = adminAuth(
       // express.js RequestHandler requires admin authentication now
     ],
   }),
-);```
+);
+```
 
 ## Type-Safe Request Values
 
