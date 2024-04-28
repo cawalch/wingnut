@@ -265,6 +265,57 @@ describe("integration tests", () => {
       "WingnutWarning: get /api/users already exists",
     );
   });
+
+  it("should handle multiple controllers", async () => {
+    const app = express();
+    const { route, paths, controller } = wingnut(ajv);
+    let usersCalled = 0;
+    let widgetCalled = 0;
+    const usersController = controller({
+      prefix: "/users",
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            "/",
+            getMethod({
+              middleware: [
+                (_req: Request, res: Response, next: NextFunction) => {
+                  usersCalled++;
+                  res.status(200).send("hello");
+                  next();
+                },
+              ],
+            }),
+          ),
+        ),
+    });
+    const widgetsController = controller({
+      prefix: "/widgets",
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            "/",
+            getMethod({
+              middleware: [
+                (_req: Request, res: Response, next: NextFunction) => {
+                  widgetCalled++;
+                  res.status(200).send("hello");
+                  next();
+                },
+              ],
+            }),
+          ),
+        ),
+    });
+
+    paths(app, usersController, widgetsController);
+    await request(app).get("/users").expect(200);
+    await request(app).get("/widgets").expect(200);
+    expect(usersCalled).toBe(1);
+    expect(widgetCalled).toBe(1);
+  });
 });
 
 interface UserAuth extends Request {
