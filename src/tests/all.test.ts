@@ -374,7 +374,54 @@ describe("Security Schema", () => {
       },
     });
   });
-  it("should call the before middleware if provided", async () => {
+  it("should call the before validation middleware if provided", async () => {
+    const app = express();
+    const { route, paths, controller } = wingnut(ajv);
+    let validated = 0;
+
+    const testController = controller({
+      prefix: "/widgets",
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            "/",
+            getMethod({
+              parameters: [
+                queryParam({
+                  name: "limit",
+                  description: "max number of users",
+                  schema: {
+                    type: "number",
+                    minimum: 1,
+                  },
+                }),
+              ],
+              middleware: [
+                (_req: Request, res: Response, next: NextFunction) => {
+                  res.status(200).send("hello");
+                  next();
+                },
+                (
+                  err: Error,
+                  _req: Request,
+                  res: Response,
+                  next: NextFunction,
+                ) => {
+                  validated++;
+                  res.status(400).send(err.name);
+                  next();
+                },
+              ],
+            }),
+          ),
+        ),
+    });
+    paths(app, testController);
+    await request(app).get("/widgets?limit=foo").expect(400);
+    expect(validated).toBe(1);
+  });
+  it("should call the before security middleware if provided", async () => {
     let calledBefore = false;
     const auth: Security = {
       name: "auth",
