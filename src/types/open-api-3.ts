@@ -1,4 +1,9 @@
-import { Request, RequestHandler, Response } from "express";
+import {
+  ErrorRequestHandler,
+  Request,
+  RequestHandler,
+  Response,
+} from "express";
 // open api 3 typings
 
 export type NamedHandler<S> = Record<
@@ -118,7 +123,7 @@ export interface PathOperation {
   security?: SecurityObject;
   parameters?: Parameter[];
   wrapper?: (cb: RequestHandler) => RequestHandler;
-  middleware: RequestHandler[];
+  middleware: Array<RequestHandler | ErrorRequestHandler>;
 }
 
 export interface MediaSchemaItem {

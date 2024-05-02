@@ -4,6 +4,7 @@ import {
   Response,
   NextFunction,
   Router,
+  ErrorRequestHandler,
 } from "express";
 import {
   AjvLike,
@@ -102,7 +103,7 @@ export const validateHandler =
   (valid: AjvLikeValidateFunction, whereIn: ParamIn) =>
   (req: Request, _res: Response, next: NextFunction) => {
     if (!valid(req[whereIn])) {
-      throw new ValidationError("WingnutValidationError", valid.errors);
+      next(new ValidationError("WingnutValidationError", valid.errors));
     }
     next();
   };
@@ -118,12 +119,14 @@ export const wingnut = (ajv: AjvLike) => {
       method,
     }: { pathOp: PathOperation; path: string; method: string },
   ) => {
-    let wrapper: (cb: RequestHandler) => RequestHandler = (cb) => cb;
+    let wrapper: (
+      cb: RequestHandler | ErrorRequestHandler,
+    ) => RequestHandler | ErrorRequestHandler = (cb) => cb;
     if (pathOp.wrapper) {
       wrapper = pathOp.wrapper;
     }
 
-    const middle: RequestHandler[] = [];
+    const middle: Array<RequestHandler | ErrorRequestHandler> = [];
 
     // security handler
     if (pathOp.scope) {
@@ -154,6 +157,7 @@ export const wingnut = (ajv: AjvLike) => {
     for (const m of pathOp.middleware) {
       middle.push(wrapper(m));
     }
+
     urtr[method](path, ...middle);
   };
 
