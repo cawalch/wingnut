@@ -288,26 +288,45 @@ export const path = (path: string, ...po: PathObject[]): PathItem => ({
 });
 
 export const asyncMethod =
-  (m: string, wrapper: (cb: AsyncRequestHandler) => RequestHandler) =>
+  (
+    m: string,
+    wrapper: (cb: AsyncRequestHandler) => ErrorRequestHandler | RequestHandler,
+  ) =>
   (pop: PathOperation): PathObject => ({
     [m]: { wrapper, ...pop },
   });
 
-type AsyncRequestHandler = (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) => Promise<void>;
+type AsyncRequestHandler = (...args: unknown[]) => Promise<void>;
 
-export const asyncWrapper =
-  (cb: AsyncRequestHandler) =>
-  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+export const asyncWrapper = (cb: AsyncRequestHandler) => {
+  // suuport 2?
+  if (cb.length === 3)
+    return async (
+      req: Request,
+      res: Response,
+      next: NextFunction,
+    ): Promise<void> => {
+      try {
+        await cb(req, res, next);
+        next();
+      } catch (e) {
+        next(e);
+      }
+    };
+  return async (
+    err: Error,
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> => {
     try {
-      await cb(req, res, next);
+      await cb(err, req, res, next);
+      next(err);
     } catch (e) {
       next(e);
     }
   };
+};
 
 export const method =
   (m: string) =>

@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { beforeEach, vi } from "vitest";
+import { assert, beforeEach, vi } from "vitest";
 import request from "supertest";
 import { describe, it, expect } from "vitest";
 import express, { NextFunction, Response, Router } from "express";
@@ -22,6 +23,8 @@ import {
   scope,
   scopeWrapper,
   asyncGetMethod,
+  asyncPostMethod,
+  asyncWrapper,
 } from "../lib/index";
 import { AjvLike } from "../types/common";
 import { Request } from "express";
@@ -374,7 +377,7 @@ describe("Security Schema", () => {
       },
     });
   });
-  it("should call the before validation middleware if provided", async () => {
+  it("should call the error middleware if provided", async () => {
     const app = express();
     const { route, paths, controller } = wingnut(ajv);
     let validated = 0;
@@ -386,19 +389,30 @@ describe("Security Schema", () => {
           router,
           path(
             "/",
-            getMethod({
-              parameters: [
-                queryParam({
-                  name: "limit",
-                  description: "max number of users",
-                  schema: {
-                    type: "number",
-                    minimum: 1,
+            asyncPostMethod({
+              requestBody: {
+                content: {
+                  "application/x-www-form-urlencoded": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        password: {
+                          type: "string",
+                          minLength: 8,
+                          maxLength: 32,
+                        },
+                      },
+                      required: ["password"],
+                    },
                   },
-                }),
-              ],
+                },
+              },
               middleware: [
-                (_req: Request, res: Response, next: NextFunction) => {
+                async (
+                  _req: Request,
+                  res: Response,
+                  next: NextFunction,
+                ): Promise<void> => {
                   res.status(200).send("hello");
                   next();
                 },
@@ -418,8 +432,72 @@ describe("Security Schema", () => {
         ),
     });
     paths(app, testController);
-    await request(app).get("/widgets?limit=foo").expect(400);
+
+    app.use(
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      (_err: Error, _req: Request, _res: Response, _next: NextFunction) => {
+        assert.fail("Should not be called");
+      },
+    );
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    await request(app)
+      .post("/widgets?limit=foo")
+      .type("form")
+      .send({ password: "moo" });
     expect(validated).toBe(1);
+  });
+  it("should call the next error middleware if provided", async () => {
+    const app = express();
+    const { route, paths, controller } = wingnut(ajv);
+    let errorOne = 0;
+
+    const testController = controller({
+      prefix: "/widgets",
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            "/",
+            asyncPostMethod({
+              middleware: [
+                async (
+                  _req: Request,
+                  _res: Response,
+                  _next: NextFunction,
+                ): Promise<void> => {
+                  throw new Error("oh no");
+                },
+                (
+                  _err: Error,
+                  _req: Request,
+                  _res: Response,
+                  _next: NextFunction,
+                ) => {
+                  errorOne++;
+                  throw new Error("oops");
+                },
+              ],
+            }),
+          ),
+        ),
+    });
+    paths(app, testController);
+
+    app.use(
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      (_err: Error, _req: Request, _res: Response, next: NextFunction) => {
+        errorOne++;
+        next();
+      },
+    );
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    await request(app)
+      .post("/widgets?limit=foo")
+      .type("form")
+      .send({ password: "moo" });
+    expect(errorOne).toBe(2);
   });
   it("should call the before security middleware if provided", async () => {
     let calledBefore = false;
@@ -495,5 +573,91 @@ describe("ScopeWrapper", () => {
     scopeWrapper(cb, scopes)(req, res, next);
     expect(cb).toHaveBeenCalledTimes(1);
     expect(next).not.toHaveBeenCalled();
+  });
+});
+
+describe("asyncWrapper", () => {
+  it("wraps normal RequestHandler", async () => {
+    let called = false;
+    const reqHandler = (
+      _req: Request,
+      _res: Response,
+      next: NextFunction,
+    ): Promise<void> => {
+      called = true;
+      next();
+      return;
+    };
+    const wrapped = asyncWrapper(reqHandler);
+    const app = express();
+
+    app.use("/", wrapped);
+
+    await request(app).get("/");
+
+    expect(called).toBe(true);
+  });
+
+  it("wraps Error RequestHandler", async () => {
+    let called = false;
+    const reqHandler = (
+      _err: Error,
+      _req: Request,
+      _res: Response,
+      next: NextFunction,
+    ): Promise<void> => {
+      called = true;
+      next();
+      return;
+    };
+    const wrapped = asyncWrapper(reqHandler);
+    const app = express();
+
+    app.use(
+      "/",
+      (_req: Request, _res: Response) => {
+        throw new Error("oh no");
+      },
+      wrapped,
+    );
+
+    await request(app).get("/");
+
+    expect(called).toBe(true);
+  });
+
+  it("catches next thrown await exception", async () => {
+    let called = 0;
+    const reqHandler = (
+      err: Error,
+      _req: Request,
+      _res: Response,
+      next: NextFunction,
+    ): Promise<void> => {
+      called++;
+      next(err);
+      return;
+    };
+    const wrapped = asyncWrapper(reqHandler);
+    const app = express();
+
+    app.use(
+      "/",
+      (_req: Request, _res: Response) => {
+        throw new Error("oh no");
+      },
+      wrapped,
+    );
+
+    app.use(
+      (_err: Error, _req: Request, _res: Response, next: NextFunction) => {
+        called++;
+        next();
+      },
+    );
+
+    await request(app).get("/");
+
+    expect(called).toBe(2);
   });
 });
