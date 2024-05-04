@@ -299,7 +299,7 @@ export const asyncMethod =
 type AsyncRequestHandler = (...args: unknown[]) => Promise<void>;
 
 export const asyncWrapper = (cb: AsyncRequestHandler) => {
-  // suuport 2?
+  // support 2?
   if (cb.length === 3)
     return async (
       req: Request,
