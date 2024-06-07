@@ -320,7 +320,6 @@ export const asyncWrapper = (cb: AsyncRequestHandler) => {
   ): Promise<void> => {
     try {
       await cb(err, req, res, next);
-      next(err);
     } catch (e) {
       next(e);
     }
