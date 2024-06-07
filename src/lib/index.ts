@@ -74,39 +74,39 @@ export const validateParams = (
 
 export const validateBuilder =
   (v: AjvLike) =>
-  (
-    s: Parameter[],
-  ): {
-    handlers: RequestHandler[];
-    schema: { [p: string]: AjvLikeSchemaObject };
-  } => {
-    const pIns = groupByParamIn(s);
-    const ret: { [p: string]: AjvLikeSchemaObject } = {};
-    const handlers: RequestHandler[] = [];
-    const validators: ValidateByParam = {
-      path: undefined,
-      query: undefined,
-      body: undefined,
-    };
+    (
+      s: Parameter[],
+    ): {
+      handlers: RequestHandler[];
+      schema: { [p: string]: AjvLikeSchemaObject };
+    } => {
+      const pIns = groupByParamIn(s);
+      const ret: { [p: string]: AjvLikeSchemaObject } = {};
+      const handlers: RequestHandler[] = [];
+      const validators: ValidateByParam = {
+        path: undefined,
+        query: undefined,
+        body: undefined,
+      };
 
-    for (const k of Object.keys(pIns)) {
-      const schema = validateParams(pIns[k]);
-      const validator = v.compile(schema);
-      validators[k as ParamIn] = validator;
-      ret[k] = schema;
-      handlers.push(validateHandler(validator, k as ParamIn));
-    }
-    return { handlers, schema: ret };
-  };
+      for (const k of Object.keys(pIns)) {
+        const schema = validateParams(pIns[k]);
+        const validator = v.compile(schema);
+        validators[k as ParamIn] = validator;
+        ret[k] = schema;
+        handlers.push(validateHandler(validator, k as ParamIn));
+      }
+      return { handlers, schema: ret };
+    };
 
 export const validateHandler =
   (valid: AjvLikeValidateFunction, whereIn: ParamIn) =>
-  (req: Request, _res: Response, next: NextFunction) => {
-    if (!valid(req[whereIn])) {
-      next(new ValidationError("WingnutValidationError", valid.errors));
-    }
-    next();
-  };
+    (req: Request, _res: Response, next: NextFunction) => {
+      if (!valid(req[whereIn])) {
+        next(new ValidationError("WingnutValidationError", valid.errors));
+      }
+      next();
+    };
 
 export const wingnut = (ajv: AjvLike) => {
   const validate = validateBuilder(ajv);
@@ -215,23 +215,23 @@ export const wingnut = (ajv: AjvLike) => {
    */
   const controller =
     (ctrl: { prefix: string; route: typeof route }) =>
-    (router: Router): PathItem[] => {
-      const paths = ctrl.route(Router());
-      router.use(ctrl.prefix, paths.router);
-      if (!Array.isArray(paths.paths)) {
-        throw new Error('WingnutError: "paths" must be an array');
-      }
-      paths.paths.forEach((p) => {
-        Object.keys(p).forEach((k) => {
-          const pathKey = `${ctrl.prefix}${k}`
-            .replace(/\(.*?\)/g, "")
-            .replace(/:(\w+)/g, "{$1}");
-          p[pathKey] = p[k];
-          delete p[k];
+      (router: Router): PathItem[] => {
+        const paths = ctrl.route(Router());
+        router.use(ctrl.prefix, paths.router);
+        if (!Array.isArray(paths.paths)) {
+          throw new Error('WingnutError: "paths" must be an array');
+        }
+        paths.paths.forEach((p) => {
+          Object.keys(p).forEach((k) => {
+            const pathKey = `${ctrl.prefix}${k}`
+              .replace(/\(.*?\)/g, "")
+              .replace(/:(\w+)/g, "{$1}");
+            p[pathKey] = p[k];
+            delete p[k];
+          });
         });
-      });
-      return paths.paths;
-    };
+        return paths.paths;
+      };
 
   /**
    * paths
@@ -292,9 +292,9 @@ export const asyncMethod =
     m: string,
     wrapper: (cb: AsyncRequestHandler) => ErrorRequestHandler | RequestHandler,
   ) =>
-  (pop: PathOperation): PathObject => ({
-    [m]: { wrapper, ...pop },
-  });
+    (pop: PathOperation): PathObject => ({
+      [m]: { wrapper, ...pop },
+    });
 
 type AsyncRequestHandler = (...args: unknown[]) => Promise<void>;
 
@@ -308,7 +308,6 @@ export const asyncWrapper = (cb: AsyncRequestHandler) => {
     ): Promise<void> => {
       try {
         await cb(req, res, next);
-        next();
       } catch (e) {
         next(e);
       }
@@ -330,9 +329,9 @@ export const asyncWrapper = (cb: AsyncRequestHandler) => {
 
 export const method =
   (m: string) =>
-  (pop: PathOperation): PathObject => ({
-    [m]: pop,
-  });
+    (pop: PathOperation): PathObject => ({
+      [m]: pop,
+    });
 
 /**
  * scopeWrapper
@@ -342,14 +341,14 @@ export const method =
  */
 export const scopeWrapper =
   (cb: RequestHandler, scopes: ScopeHandler[]) =>
-  (req: Request, res: Response, next: NextFunction) => {
-    if (scopes.some((v) => v(req, res, next))) {
-      next();
-      return;
-    } else {
-      cb(req, res, next);
-    }
-  };
+    (req: Request, res: Response, next: NextFunction) => {
+      if (scopes.some((v) => v(req, res, next))) {
+        next();
+        return;
+      } else {
+        cb(req, res, next);
+      }
+    };
 
 /**
  * scope
@@ -429,22 +428,22 @@ export const scope = <T = string>(
  */
 export const authPathOp =
   (scope: ScopeObject) =>
-  (pop: PathObject): PathObject => {
-    const [m] = Object.keys(pop);
-    const ret: PathOperation = pop[m as keyof PathObject];
+    (pop: PathObject): PathObject => {
+      const [m] = Object.keys(pop);
+      const ret: PathOperation = pop[m as keyof PathObject];
 
-    ret.security = [{ [scope.auth]: scope.scopes }];
-    ret.scope = [scope];
-    ret.responses = { ...ret.responses, ...scope.responses };
-    return { [m]: ret };
-  };
+      ret.security = [{ [scope.auth]: scope.scopes }];
+      ret.scope = [scope];
+      ret.responses = { ...ret.responses, ...scope.responses };
+      return { [m]: ret };
+    };
 
 export const param =
   (pin: ParamIn) =>
-  (param: Omit<Parameter, "in">): Parameter => ({
-    in: pin,
-    ...param,
-  });
+    (param: Omit<Parameter, "in">): Parameter => ({
+      in: pin,
+      ...param,
+    });
 
 export const integer = (sch: Partial<ParamSchema>): ParamSchema => ({
   type: "integer",
@@ -513,51 +512,51 @@ type WnTDataDef<S, D extends Record<string, unknown>> = S extends {
 }
   ? number
   : S extends { type: "boolean" }
-    ? boolean
-    : S extends { type: "timestamp" }
-      ? string | Date
-      : S extends { type: "array"; items: { type: string } }
-        ? WnTDataDef<S["items"], D>[]
-        : S extends { type: "string"; enum: readonly (infer E)[] }
-          ? string extends E
-            ? never
-            : [E] extends [string]
-              ? E
-              : never
-          : S extends { elements: infer E }
-            ? WnTDataDef<E, D>[]
-            : S extends { type: "string" }
-              ? string
-              : S extends {
-                    properties: Record<string, unknown>;
-                    required?: readonly string[];
-                    additionalProperties?: boolean;
-                  }
-                ? {
-                    -readonly [K in keyof S["properties"]]?: WnTDataDef<
-                      S["properties"][K],
-                      D
-                    >;
-                  } & {
-                    -readonly [K in S["required"][number]]: WnTDataDef<
-                      S["properties"][K],
-                      D
-                    >;
-                  } & ([S["additionalProperties"]] extends [true]
-                      ? Record<string, unknown>
-                      : unknown)
-                : S extends { name: string; schema: Record<string, unknown> }
-                  ? {
-                      -readonly [K in S["name"]]: WnTDataDef<S["schema"], D>;
-                    }
-                  : S extends {
-                        description: string;
-                        schema: Record<string, unknown>;
-                      }
-                    ? WnDataType<S["schema"]>
-                    : S extends { type: "object" }
-                      ? Record<string, unknown>
-                      : null;
+  ? boolean
+  : S extends { type: "timestamp" }
+  ? string | Date
+  : S extends { type: "array"; items: { type: string } }
+  ? WnTDataDef<S["items"], D>[]
+  : S extends { type: "string"; enum: readonly (infer E)[] }
+  ? string extends E
+  ? never
+  : [E] extends [string]
+  ? E
+  : never
+  : S extends { elements: infer E }
+  ? WnTDataDef<E, D>[]
+  : S extends { type: "string" }
+  ? string
+  : S extends {
+    properties: Record<string, unknown>;
+    required?: readonly string[];
+    additionalProperties?: boolean;
+  }
+  ? {
+    -readonly [K in keyof S["properties"]]?: WnTDataDef<
+      S["properties"][K],
+      D
+    >;
+  } & {
+    -readonly [K in S["required"][number]]: WnTDataDef<
+      S["properties"][K],
+      D
+    >;
+  } & ([S["additionalProperties"]] extends [true]
+    ? Record<string, unknown>
+    : unknown)
+  : S extends { name: string; schema: Record<string, unknown> }
+  ? {
+    -readonly [K in S["name"]]: WnTDataDef<S["schema"], D>;
+  }
+  : S extends {
+    description: string;
+    schema: Record<string, unknown>;
+  }
+  ? WnDataType<S["schema"]>
+  : S extends { type: "object" }
+  ? Record<string, unknown>
+  : null;
 
 export type WnDataType<S> = WnTDataDef<S, Record<string, never>>;
 
