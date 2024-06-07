@@ -330,8 +330,8 @@ interface UserAuth extends Request {
 describe("Security Schema", () => {
   const UserLevel =
     (minLevel: number): ScopeHandler =>
-    (req: UserAuth): boolean =>
-      (req.user?.level ?? 0) > minLevel;
+      (req: UserAuth): boolean =>
+        (req.user?.level ?? 0) > minLevel;
   const routeHandler = () => {
     return;
   };
@@ -452,6 +452,8 @@ describe("Security Schema", () => {
     const { route, paths, controller } = wingnut(ajv);
     let errorOne = 0;
 
+    const htmlRouter = express.Router();
+
     const testController = controller({
       prefix: "/widgets",
       route: (router: Router) =>
@@ -482,15 +484,17 @@ describe("Security Schema", () => {
           ),
         ),
     });
-    paths(app, testController);
+    paths(htmlRouter, testController);
 
-    app.use(
+    htmlRouter.use(
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       (_err: Error, _req: Request, _res: Response, next: NextFunction) => {
         errorOne++;
         next();
       },
     );
+
+    app.use(htmlRouter);
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     await request(app)
