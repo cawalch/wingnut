@@ -1,7 +1,6 @@
 {
   "name": "wingnut",
-  "type": "module",
-  "version": "0.3.10",
+  "version": "0.3.11",
   "description": "API validation middleware builder based on Open API V3 specs",
   "main": "./dist/index.js",
   "scripts": {
@@ -9,7 +8,7 @@
     "test": "vitest",
     "preinstall": "npx only-allow pnpm",
     "coverage": "vitest run --coverage",
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node18 --outdir=dist --packages=external && tsc --project tsconfig.build.json",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node18 --outdir=dist && tsc --project tsconfig.build.json",
     "lint": "eslint . --ext .ts"
   },
   "author": "cawalch@pm.me",
