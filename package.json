@@ -9,7 +9,7 @@
     "test": "vitest",
     "preinstall": "npx only-allow pnpm",
     "coverage": "vitest run --coverage",
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node14 --outdir=dist --packages=external && tsc --project tsconfig.build.json",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node18 --outdir=dist --packages=external && tsc --project tsconfig.build.json",
     "lint": "eslint . --ext .ts"
   },
   "author": "cawalch@pm.me",
