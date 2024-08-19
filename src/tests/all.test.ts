@@ -182,7 +182,7 @@ describe("integration tests", () => {
     expect(badResponse.status).toBe(400);
   });
 
-  it.only("should validate when nextFunction is not used", async () => {
+  it("should validate when nextFunction is not used", async () => {
     const { route, paths, controller } = wingnut(ajv);
     const userHandler = (req: Request, res: Response) => {
       console.log(req.params);
