@@ -182,6 +182,56 @@ describe("integration tests", () => {
     expect(badResponse.status).toBe(400);
   });
 
+  it.only("should validate when nextFunction is not used", async () => {
+    const { route, paths, controller } = wingnut(ajv);
+    const userHandler = (req: Request, res: Response) => {
+      console.log(req.params);
+      console.log(req.query);
+      res.status(200).json(req.params);
+    };
+    const createUserHandler = path(
+      "/users",
+      getMethod({
+        parameters: [
+          queryParam({
+            name: "limit",
+            description: "max number",
+            schema: {
+              type: "number",
+              minimum: 1,
+            },
+          }),
+        ],
+        middleware: [userHandler],
+      }),
+    );
+    const app = express();
+    app.use(express.json());
+    paths(
+      app,
+      controller({
+        prefix: "/api",
+        route: (router: Router) => route(router, createUserHandler),
+      }),
+    );
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+      if (err instanceof ValidationError) {
+        res.status(400).send({ err: err.message, context: err.context });
+      } else {
+        res.status(400).send({ err: err.message });
+      }
+    });
+
+    const response = await request(app).get("/api/users").query({ limit: 1 });
+    expect(response.status).toBe(200);
+
+    const badResponse = await request(app)
+      .get("/api/users")
+      .query({ limit: "foo" });
+    expect(badResponse.status).toBe(400);
+  });
+
   it("should validate request body", async () => {
     const { route, paths, controller } = wingnut(ajv);
     const userHandler = (req: Request, res: Response, next: NextFunction) => {
@@ -330,8 +380,8 @@ interface UserAuth extends Request {
 describe("Security Schema", () => {
   const UserLevel =
     (minLevel: number): ScopeHandler =>
-      (req: UserAuth): boolean =>
-        (req.user?.level ?? 0) > minLevel;
+    (req: UserAuth): boolean =>
+      (req.user?.level ?? 0) > minLevel;
   const routeHandler = () => {
     return;
   };
@@ -664,4 +714,5 @@ describe("asyncWrapper", () => {
 
     expect(called).toBe(2);
   });
+
 });

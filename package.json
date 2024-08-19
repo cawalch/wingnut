@@ -1,7 +1,7 @@
 {
   "name": "wingnut",
   "type": "module",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "API validation middleware builder based on Open API V3 specs",
   "main": "./dist/index.js",
   "scripts": {
@@ -58,7 +58,7 @@
     "typescript",
     "express.js"
   ],
-  "packageManager": "pnpm@9.2.0",
+  "packageManager": "pnpm@9.7.1",
   "homepage": "https://github.com/cawalch/wingnut#readme",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"

@@ -1,29 +1,29 @@
 import {
-  RequestHandler,
-  Request,
-  Response,
-  NextFunction,
-  Router,
-  ErrorRequestHandler,
+    ErrorRequestHandler,
+    NextFunction,
+    Request,
+    RequestHandler,
+    Response,
+    Router,
 } from "express";
 import {
-  AjvLike,
-  AjvLikeSchemaObject,
-  AjvLikeValidateFunction,
+    AjvLike,
+    AjvLikeSchemaObject,
+    AjvLikeValidateFunction,
 } from "../types/common";
 import {
-  AppObject,
-  MediaSchemaItem,
-  NamedHandler,
-  ParamIn,
-  ParamSchema,
-  Parameter,
-  PathItem,
-  PathObject,
-  PathOperation,
-  ScopeHandler,
-  ScopeObject,
-  inMap,
+    AppObject,
+    MediaSchemaItem,
+    NamedHandler,
+    ParamIn,
+    ParamSchema,
+    Parameter,
+    PathItem,
+    PathObject,
+    PathOperation,
+    ScopeHandler,
+    ScopeObject,
+    inMap,
 } from "../types/open-api-3";
 import { ValidationError } from "./errors";
 
@@ -299,7 +299,11 @@ export const asyncMethod =
 type AsyncRequestHandler = (...args: unknown[]) => Promise<void>;
 
 export const asyncWrapper = (cb: AsyncRequestHandler) => {
-  // support 2?
+  if (cb.length === 2) {
+    return async (req: Request, res: Response) => {
+       await cb(req, res);
+    };
+  }
   if (cb.length === 3)
     return async (
       req: Request,
@@ -497,11 +501,14 @@ export const pathParam = param("path");
 export const getMethod = method("get");
 export const postMethod = method("post");
 export const putMethod = method("put");
+export const patchMethod = method("patch");
 export const deleteMethod = method("delete");
 export const asyncGetMethod = asyncMethod("get", asyncWrapper);
 
 export const asyncPostMethod = asyncMethod("post", asyncWrapper);
+export const asyncPatchMethod = asyncMethod("patch", asyncWrapper);
 export const asyncPutMethod = asyncMethod("put", asyncWrapper);
+
 export const asyncDeleteMethod = asyncMethod("delete", asyncWrapper);
 
 type WnNumberType = "integer" | "int32" | "int8" | "number";
