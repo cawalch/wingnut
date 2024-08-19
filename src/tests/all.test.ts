@@ -185,8 +185,6 @@ describe("integration tests", () => {
   it("should validate when nextFunction is not used", async () => {
     const { route, paths, controller } = wingnut(ajv);
     const userHandler = (req: Request, res: Response) => {
-      console.log(req.params);
-      console.log(req.query);
       res.status(200).json(req.params);
     };
     const createUserHandler = path(
