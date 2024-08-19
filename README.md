@@ -1,6 +1,7 @@
 # Wingnut
 
-A node.js library to build express.js APIs using [OpenAPI V3 specs](https://swagger.io/specification/) for validation and documentation.
+A node.js library to build express.js APIs using [OpenAPI V3 specs](https://swagger.io/specification/)
+for validation and documentation.
 
 [![npm version](https://badge.fury.io/js/wingnut.svg)](https://badge.fury.io/js/wingnut)
 [![codecov](https://codecov.io/gh/cawalch/wingnut/graph/badge.svg?token=E7LJCNGZET)](https://codecov.io/gh/cawalch/wingnut)
@@ -310,5 +311,4 @@ export const apis = (app: Express) => {
 // app.ts
 apis(app)
 app.listen(3000)
-
 ```
