@@ -24,6 +24,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-
 
+      - name: Install Biome
+        run: pnpm add -g @biomejs/biome
+
       - name: Install dependencies
         run: pnpm install
 
