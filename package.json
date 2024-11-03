@@ -1,6 +1,6 @@
 {
   "name": "wingnut",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "description": "API validation middleware builder based on Open API V3 specs",
   "main": "./dist/index.js",
   "scripts": {
