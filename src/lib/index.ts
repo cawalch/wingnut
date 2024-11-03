@@ -224,7 +224,7 @@ export const wingnut = (ajv: AjvLike) => {
       paths.paths.forEach((p) => {
         Object.keys(p).forEach((k) => {
           const pathKey = `${ctrl.prefix}${k}`
-            .replace(/\(.*?\)/g, '')
+            .replace(/\([^()]*\)/g, '')
             .replace(/:(\w+)/g, '{$1}')
           p[pathKey] = p[k]
           delete p[k]
