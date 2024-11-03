@@ -589,6 +589,17 @@ describe('Security Schema', () => {
     await request(app).get('/api/users')
     expect(calledBefore).toBe(true)
   })
+  it('should throw error when paths is not an array', () => {
+    const { controller } = wingnut(ajv)
+    const mockRoute = () => ({ router: Router(), paths: 'not an array' })
+
+    expect(() =>
+      controller({
+        prefix: '/api',
+        route: mockRoute as any,
+      })(Router()),
+    ).toThrow('WingnutError: "paths" must be an array')
+  })
 })
 
 describe('ScopeWrapper', () => {
