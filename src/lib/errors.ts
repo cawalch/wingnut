@@ -1,10 +1,10 @@
 export class WingnutError extends Error {
   constructor(message: string) {
-    super(message);
+    super(message)
     if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, this.constructor);
+      Error.captureStackTrace(this, this.constructor)
     }
-    this.name = "WingnutError";
+    this.name = 'WingnutError'
   }
 }
 
@@ -13,8 +13,8 @@ export class ValidationError extends WingnutError {
     message: string,
     public context: unknown,
   ) {
-    super(message);
-    this.name = "ValidationError";
-    this.context = context;
+    super(message)
+    this.name = 'ValidationError'
+    this.context = context
   }
 }
