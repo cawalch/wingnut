@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { RequestHandler } from 'express'
 
 export type Route = (path: string, ...handler: RequestHandler[]) => void

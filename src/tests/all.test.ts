@@ -2,8 +2,6 @@ import Ajv from 'ajv'
 import express, { NextFunction, Response, Router } from 'express'
 import { Request } from 'express'
 import request from 'supertest'
-/* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { assert, beforeEach, vi } from 'vitest'
 import { describe, expect, it } from 'vitest'
 import { path, wingnut } from '../lib'
@@ -164,7 +162,6 @@ describe('integration tests', () => {
         route: (router: Router) => route(router, createUserHandler),
       }),
     )
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
       if (err instanceof ValidationError) {
         res.status(400).send({ err: err.message, context: err.context })
@@ -212,7 +209,6 @@ describe('integration tests', () => {
         route: (router: Router) => route(router, createUserHandler),
       }),
     )
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
       if (err instanceof ValidationError) {
         res.status(400).send({ err: err.message, context: err.context })
@@ -267,7 +263,6 @@ describe('integration tests', () => {
         route: (router: Router) => route(router, createUserHandler),
       }),
     )
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
       res.status(400).send({ err: err.message })
     })
@@ -482,13 +477,11 @@ describe('Security Schema', () => {
     paths(app, testController)
 
     app.use(
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       (_err: Error, _req: Request, _res: Response, _next: NextFunction) => {
         assert.fail('Should not be called')
       },
     )
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     await request(app)
       .post('/widgets?limit=foo')
       .type('form')
@@ -535,7 +528,6 @@ describe('Security Schema', () => {
     paths(htmlRouter, testController)
 
     htmlRouter.use(
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       (_err: Error, _req: Request, _res: Response, next: NextFunction) => {
         errorOne++
         next()
@@ -544,7 +536,6 @@ describe('Security Schema', () => {
 
     app.use(htmlRouter)
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     await request(app)
       .post('/widgets?limit=foo')
       .type('form')
