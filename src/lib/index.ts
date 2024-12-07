@@ -41,36 +41,47 @@ export interface Security<S = string> {
 
 export const app = (a: AppObject): AppObject => a
 
-export const groupByParamIn = (params: Parameter[]) =>
-  params.reduce(
+export const groupByParamIn = (
+  params: Parameter[],
+): { [key in ParamIn]?: Parameter[] } => {
+  return params.reduce(
     (group, p) => {
-      const m = inMap[p.in]
-      if (!group[m]) {
-        group[m] = []
+      const key = inMap[p.in]
+      if (!group[key]) {
+        group[key] = []
       }
-      group[m].push(p)
+      group[key].push(p)
       return group
     },
-    {} as { [key in string]: Parameter[] },
+    {} as { [key in ParamIn]: Parameter[] },
   )
+}
 
 export const validateParams = (
-  p: (Partial<Parameter> & { name: string })[],
-): AjvLikeSchemaObject =>
-  p.reduce<AjvLikeSchemaObject>(
-    (acc, s) => {
-      acc.properties[s.name] = { ...s.schema }
-      if (s.required === true) {
-        acc.required.push(s.name)
+  params: (Partial<Parameter> & { name: string })[],
+): AjvLikeSchemaObject => {
+  const schema: AjvLikeSchemaObject = {
+    type: 'object',
+    properties: {},
+    required: [],
+  }
+
+  for (const param of params) {
+    if (!param.schema) {
+      continue
+    }
+
+    schema.properties[param.name] = { ...param.schema }
+
+    if (param.required) {
+      if (!schema.required.includes(param.name)) {
+        schema.required.push(param.name)
       }
-      return acc
-    },
-    {
-      type: 'object',
-      properties: {},
-      required: [],
-    } as ParamSchema,
-  )
+    }
+  }
+
+  return schema
+}
 
 export const validateBuilder =
   (v: AjvLike) =>
@@ -78,10 +89,10 @@ export const validateBuilder =
     s: Parameter[],
   ): {
     handlers: RequestHandler[]
-    schema: { [p: string]: AjvLikeSchemaObject }
+    schema: { [key in ParamIn]?: AjvLikeSchemaObject }
   } => {
     const pIns = groupByParamIn(s)
-    const ret: { [p: string]: AjvLikeSchemaObject } = {}
+    const ret: { [key in ParamIn]?: AjvLikeSchemaObject } = {}
     const handlers: RequestHandler[] = []
     const validators: ValidateByParam = {
       path: undefined,
@@ -93,7 +104,7 @@ export const validateBuilder =
       const schema = validateParams(pIns[k])
       const validator = v.compile(schema)
       validators[k as ParamIn] = validator
-      ret[k] = schema
+      ret[k as ParamIn] = schema
       handlers.push(validateHandler(validator, k as ParamIn))
     }
     return { handlers, schema: ret }
@@ -130,11 +141,7 @@ export const wingnut = (ajv: AjvLike) => {
 
     // security handler
     if (pathOp.scope) {
-      for (const s of pathOp.scope) {
-        for (const m of s.middleware) {
-          middle.push(wrapper(m))
-        }
-      }
+      middle.push(...handleScopes(pathOp.scope, wrapper))
     }
 
     if (pathOp.requestBody?.content !== undefined) {
@@ -149,16 +156,20 @@ export const wingnut = (ajv: AjvLike) => {
 
     if (pathOp.parameters) {
       const { handlers } = validate(pathOp.parameters)
-      for (const h of handlers) {
-        middle.push(wrapper(h))
-      }
+      handlers.forEach((h) => middle.push(wrapper(h)))
     }
 
-    for (const m of pathOp.middleware) {
-      middle.push(wrapper(m))
-    }
+    pathOp.middleware?.forEach((m) => middle.push(wrapper(m)))
 
     urtr[method](path, ...middle)
+  }
+
+  const handleScopes = (scopes: ScopeObject[], wrapper: any) => {
+    const middleware: (RequestHandler | ErrorRequestHandler)[] = []
+    for (const s of scopes) {
+      middleware.push(...s.middleware.map((m) => wrapper(m)))
+    }
+    return middleware
   }
 
   /**
@@ -184,19 +195,14 @@ export const wingnut = (ajv: AjvLike) => {
   const route = (rtr: Router, ...pitems: PathItem[]): AppRoute => ({
     paths: pitems,
     router: pitems.reduce((urtr, pitem) => {
-      Object.keys(pitem).forEach((path: string) => {
-        Object.keys(pitem[path]).forEach((method: keyof PathObject) =>
-          mapRouter(urtr, {
-            pathOp: pitem[path][method],
-            path,
-            method,
-          }),
-        )
+      Object.entries(pitem).forEach(([path, pathObj]) => {
+        Object.entries(pathObj).forEach(([method, pathOp]) => {
+          mapRouter(urtr, { pathOp, path, method })
+        })
       })
       return urtr
     }, rtr),
   })
-
   /**
    * controller
    *
@@ -254,25 +260,24 @@ export const wingnut = (ajv: AjvLike) => {
     router: Router,
     ...ctrls: ReturnType<typeof controller>[]
   ): PathItem => {
-    const paths = ctrls.reduce(
-      (acc, c) => {
-        const paths = c(router)
-        paths.forEach((p) => {
-          const [path] = Object.keys(p)
-          const [method] = Object.keys(p[path])
-          const full = `${method} ${path}`
-          if (acc.track.has(full)) {
-            console.warn(`WingnutWarning: ${full} already exists`)
-          } else {
-            acc.track.add(full)
-          }
-          Object.assign(acc.out, p)
-        })
-        return acc
-      },
-      { out: {}, track: new Set<string>() },
-    )
-    return paths.out
+    const acc = { out: {}, track: new Map<string, boolean>() }
+
+    ctrls.forEach((c) => {
+      const p = c(router)
+      p.forEach((item) => {
+        const path = Object.keys(item)[0]
+        const method = Object.keys(item[path])[0]
+        const full = `${method} ${path}`
+        if (acc.track.has(full)) {
+          console.warn(`WingnutWarning: ${full} already exists`)
+        } else {
+          acc.track.set(full, true)
+        }
+        Object.assign(acc.out, item)
+      })
+    })
+
+    return acc.out
   }
 
   return {
@@ -345,9 +350,9 @@ export const method =
 export const scopeWrapper =
   (cb: RequestHandler, scopes: ScopeHandler[]) =>
   (req: Request, res: Response, next: NextFunction) => {
-    if (scopes.some((v) => v(req, res, next))) {
+    const isAuthorized = scopes.some((v) => v(req, res, next))
+    if (isAuthorized) {
       next()
-      return
     } else {
       cb(req, res, next)
     }
@@ -397,18 +402,27 @@ export const scopeWrapper =
 export const scope = <T = string>(
   security: Security<T>,
   ...scopes: (keyof NamedHandler<T>)[]
-): ScopeObject => ({
-  auth: security.name,
-  scopes,
-  middleware: [
-    ...(security.before ? [security.before] : []),
-    scopeWrapper(
-      security.handler,
-      scopes.map((s) => security.scopes[s]),
-    ),
-  ],
-  responses: security.responses,
-})
+): ScopeObject => {
+  const middleware: RequestHandler[] = []
+  if (security.before) {
+    middleware.push(security.before)
+  }
+  const scopeMiddlewares = scopes.map((s) => {
+    const handler = security.scopes[s]
+    if (!handler) {
+      console.error(`WingnutError: Scope '${s}' not found in security.scopes`)
+      throw new Error(`Scope '${s}' not found`)
+    }
+    return handler
+  })
+  middleware.push(scopeWrapper(security.handler, scopeMiddlewares))
+  return {
+    auth: security.name,
+    scopes,
+    middleware,
+    responses: security.responses,
+  }
+}
 
 /**
  * authPathOp
@@ -432,15 +446,17 @@ export const scope = <T = string>(
 export const authPathOp =
   (scope: ScopeObject) =>
   (pop: PathObject): PathObject => {
-    const [m] = Object.keys(pop)
-    const ret: PathOperation = pop[m as keyof PathObject]
-
-    ret.security = [{ [scope.auth]: scope.scopes }]
-    ret.scope = [scope]
-    ret.responses = { ...ret.responses, ...scope.responses }
-    return { [m]: ret }
+    const method = Object.keys(pop)[0]
+    const operation: PathOperation = pop[method as keyof PathObject]
+    operation.security = [{ [scope.auth]: scope.scopes }]
+    operation.scope = [scope]
+    operation.responses = { ...operation.responses, ...scope.responses }
+    return { [method]: operation }
   }
 
+/**
+ * Create a parameter schema with the given `in` location.
+ */
 export const param =
   (pin: ParamIn) =>
   (param: Omit<Parameter, 'in'>): Parameter => ({

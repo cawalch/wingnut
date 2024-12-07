@@ -102,6 +102,22 @@ describe('validateParams', () => {
       required: ['id'],
     })
   })
+
+  it('should handle params without schema', () => {
+    const params: (Partial<Parameter> & { name: string })[] = [
+      {
+        in: 'path',
+        name: 'id',
+        // schema is not provided
+      },
+    ]
+    const result = validateParams(params)
+    expect(result).toStrictEqual({
+      type: 'object',
+      properties: {},
+      required: [],
+    })
+  })
 })
 
 describe('validateBuilder', () => {
@@ -599,6 +615,75 @@ describe('Security Schema', () => {
         route: mockRoute as any,
       })(Router()),
     ).toThrow('WingnutError: "paths" must be an array')
+  })
+
+  it('should throw error when scope does not exist', () => {
+    const consoleSpyError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {
+        return
+      })
+    const security: Security = {
+      name: 'auth',
+      handler: (_req: Request, res: Response) => {
+        res.status(400).send('Not Auth')
+      },
+      scopes: {
+        admin: () => true,
+      },
+      responses: {
+        '400': {
+          description: 'Not Auth',
+        },
+      },
+    }
+
+    try {
+      scope(security, 'admin', 'nonexistent')
+      assert.fail('Expected an error to be thrown')
+    } catch (err) {
+      expect(err.message).toBe("Scope 'nonexistent' not found")
+    }
+
+    expect(consoleSpyError).toHaveBeenCalledWith(
+      "WingnutError: Scope 'nonexistent' not found in security.scopes",
+    )
+
+    consoleSpyError.mockRestore()
+  })
+
+  it('should not throw error when all scopes exist', () => {
+    const consoleSpyError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {
+        return
+      })
+    const security: Security = {
+      name: 'auth',
+      handler: (_req: Request, res: Response) => {
+        res.status(400).send('Not Auth')
+      },
+      scopes: {
+        admin: () => true,
+        moderator: () => true,
+      },
+      responses: {
+        '400': {
+          description: 'Not Auth',
+        },
+      },
+    }
+
+    try {
+      const result = scope(security, 'admin', 'moderator')
+      expect(result).toBeDefined()
+    } catch (_err) {
+      assert.fail('Unexpected error thrown')
+    }
+
+    expect(consoleSpyError).not.toHaveBeenCalled()
+
+    consoleSpyError.mockRestore()
   })
 })
 
