@@ -6,7 +6,7 @@
   "scripts": {
     "prepublish": "pnpm build",
     "test": "vitest",
-    "preinstall": "npx only-allow pnpm",
+    "test:no-watch": "vitest --run",
     "coverage": "vitest run --coverage",
     "build": "esbuild src/index.ts --bundle --platform=node --target=node18 --minify --tree-shaking=true --external:express --external:ajv --outdir=dist && tsc --project tsconfig.build.json",
     "lint": "biome check --diagnostic-level=error",
