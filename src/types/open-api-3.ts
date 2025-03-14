@@ -141,7 +141,7 @@ export const inMap = {
   path: 'params',
   query: 'query',
   body: 'body',
+  header: 'headers',
 }
 
-export type ParamIn = 'query' | 'path' | 'body'
-// export type ParamIn = "query" | "path" | "header" | "body" | "cookie";
+export type ParamIn = 'query' | 'path' | 'body' | 'header'
