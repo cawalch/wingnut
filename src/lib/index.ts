@@ -98,6 +98,7 @@ export const validateBuilder =
       path: undefined,
       query: undefined,
       body: undefined,
+      header: undefined,
     }
 
     for (const k of Object.keys(pIns)) {
@@ -514,6 +515,9 @@ export const queryParam = param('query')
  * ```
  */
 export const pathParam = param('path')
+
+export const headerParam = param('header')
+
 export const getMethod = method('get')
 export const postMethod = method('post')
 export const putMethod = method('put')

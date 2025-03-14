@@ -4,7 +4,7 @@ import { Request } from 'express'
 import request from 'supertest'
 import { assert, beforeEach, vi } from 'vitest'
 import { describe, expect, it } from 'vitest'
-import { path, wingnut } from '../lib'
+import { path, headerParam, wingnut } from '../lib'
 import { ValidationError } from '../lib/errors'
 import {
   Security,
@@ -131,6 +131,27 @@ describe('validateBuilder', () => {
     const result = validator([param])
     expect(result.schema).toEqual({
       params: {
+        properties: {
+          id: {
+            type: 'string',
+          },
+        },
+        required: [],
+        type: 'object',
+      },
+    })
+  })
+
+  it('should build a validator with headers', () => {
+    const mockAjvLike = {
+      compile: () => () => true,
+    }
+
+    const validator = validateBuilder(mockAjvLike as unknown as AjvLike)
+    const param: Parameter = createParameter('header', 'id', 'string')
+    const result = validator([param])
+    expect(result.schema).toEqual({
+      headers: {
         properties: {
           id: {
             type: 'string',
@@ -798,5 +819,160 @@ describe('asyncWrapper', () => {
     await request(app).get('/')
 
     expect(called).toBe(2)
+  })
+})
+
+describe('headerParam', () => {
+  it('should validate a valid header', async () => {
+    const { route, paths, controller } = wingnut(ajv)
+    const handler = (req: Request, res: Response) => {
+      res.status(200).json(req.headers)
+    }
+    const api = path(
+      '/test',
+      getMethod({
+        parameters: [
+          headerParam({
+            name: 'x-custom-header',
+            schema: { type: 'string' },
+            required: true,
+          }),
+        ],
+        middleware: [handler],
+      }),
+    )
+    const app = express()
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (router: Router) => route(router, api),
+      }),
+    )
+    app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+      if (err instanceof ValidationError) {
+        res.status(400).send({ err: err.message, context: err.context })
+      }
+    })
+
+    const response = await request(app)
+      .get('/api/test')
+      .set('x-custom-header', 'value') // Set the header
+    expect(response.status).toBe(200)
+  })
+
+  it('should validate and coerce a valid header', async () => {
+    const { route, paths, controller } = wingnut(ajv)
+    const handler = (req: Request, res: Response) => {
+      res.status(200).json(req.headers)
+    }
+    const api = path(
+      '/test',
+      getMethod({
+        parameters: [
+          headerParam({
+            name: 'x-custom-header',
+            schema: { type: 'integer' },
+            required: true,
+          }),
+        ],
+        middleware: [handler],
+      }),
+    )
+    const app = express()
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (router: Router) => route(router, api),
+      }),
+    )
+    app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+      if (err instanceof ValidationError) {
+        res.status(400).send({ err: err.message, context: err.context })
+      }
+    })
+
+    const response = await request(app)
+      .get('/api/test')
+      .set('x-custom-header', '123') // Set the header
+    expect(response.status).toBe(200)
+  })
+
+  it('should fail validation for an invalid header', async () => {
+    const { route, paths, controller } = wingnut(ajv)
+    const handler = (req: Request, res: Response) => {
+      res.status(200).json(req.headers)
+    }
+    const api = path(
+      '/test',
+      getMethod({
+        parameters: [
+          headerParam({
+            name: 'x-custom-header',
+            schema: { type: 'string' },
+            required: true,
+          }),
+        ],
+        middleware: [handler],
+      }),
+    )
+    const app = express()
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (router: Router) => route(router, api),
+      }),
+    )
+    app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+      if (err instanceof ValidationError) {
+        res.status(400).send({ err: err.message, context: err.context })
+      }
+    })
+
+    const response = await request(app).get('/api/test') // No header set
+    expect(response.status).toBe(400)
+    expect(response.body.err).toBe('WingnutValidationError')
+    expect(response.body.context).toBeDefined() // Check that context is provided
+  })
+  it('should fail validation for an invalid header type', async () => {
+    const { route, paths, controller } = wingnut(ajv)
+    const handler = (req: Request, res: Response) => {
+      res.status(200).json(req.headers)
+    }
+    const api = path(
+      '/test',
+      getMethod({
+        parameters: [
+          headerParam({
+            name: 'x-custom-header',
+            schema: { type: 'integer' },
+            required: true,
+          }),
+        ],
+        middleware: [handler],
+      }),
+    )
+    const app = express()
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (router: Router) => route(router, api),
+      }),
+    )
+    app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+      if (err instanceof ValidationError) {
+        res.status(400).send({ err: err.message, context: err.context })
+      }
+    })
+
+    const response = await request(app)
+      .get('/api/test')
+      .set('x-custom-header', 'abc') // No header set
+    expect(response.status).toBe(400)
+    expect(response.body.err).toBe('WingnutValidationError')
+    expect(response.body.context).toBeDefined() // Check that context is provided
   })
 })

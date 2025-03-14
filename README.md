@@ -148,19 +148,59 @@ pathParam({
 });
 ```
 
+## Header Parameter Validation
+
+```typescript
+// Validate `x-api-key` against `req.headers`
+import { wingnut, getMethod, path, headerParam } from "wingnut";
+
+// ...
+
+const apiKeyHandler = getMethod({
+  parameters: [
+    headerParam({
+      name: "x-api-key",
+      description: "API Key for authentication",
+      schema: {
+        type: "string",
+        minLength: 32,
+      },
+      required: true,
+    }),
+  ],
+  middleware: [
+    (req: express.Request, res: express.Response) => {
+      // Access the validated header
+      const apiKey = req.headers["x-api-key"];
+      console.log("API Key:", apiKey);
+      res.status(200).send("OK");
+    },
+  ],
+});
+```
+
 ## Secure Routes with Scopes
 
 ```typescript
-import {Request, Response} from "express";
-import {scope, Security, authPathOp, ScopeHandler, putMethod, ParamSchema} from "wingnut";
+import { Request, Response } from "express";
+import {
+  scope,
+  Security,
+  authPathOp,
+  ScopeHandler,
+  putMethod,
+  ParamSchema,
+} from "wingnut";
 
-interface UserAuth extends Request {user?: {level: number}};
+interface UserAuth extends Request {
+  user?: { level: number };
+}
 
 // Build a scope handler to evaluate the user context (session)
 const userLevelAuth =
   (minLevel: number): ScopeHandler =>
-    (req: UserAuth): boolean =>
-      (req.user?.level ?? 0) >= minLevel;
+  (req: UserAuth): boolean =>
+    (req.user?.level ?? 0) >= minLevel;
 
 // Build Authorization Security object
 const auth: Security = {
@@ -267,7 +307,7 @@ const listLogsHandler = (
   const { limit, filter } = req.query;
   // ...
 };
-````
+```
 
 ### Swagger Documentation
 
