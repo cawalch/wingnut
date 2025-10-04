@@ -68,7 +68,9 @@ export const validateParams = (
       continue
     }
 
-    schema.properties[param.name] = { ...param.schema }
+    // Direct assignment - param.schema is not mutated after this point
+    // This avoids unnecessary object spread allocation
+    schema.properties[param.name] = param.schema
 
     if (param.required) {
       if (!schema.required.includes(param.name)) {
@@ -109,20 +111,109 @@ export const validateBuilder =
     return { handlers, schema }
   }
 
+// Reuse error message string to reduce allocations
+const VALIDATION_ERROR_MESSAGE = 'WingnutValidationError'
+
 export const validateHandler =
   (valid: AjvLikeValidateFunction, whereIn: ParamIn): RequestHandler =>
   (req, _res, next) => {
     const dataSource = req[inMap[whereIn]]
     if (!valid(dataSource)) {
       return next(
-        new ValidationError('WingnutValidationError', { cause: valid.errors }),
+        new ValidationError(VALIDATION_ERROR_MESSAGE, { cause: valid.errors }),
       )
     }
     return next()
   }
 
+/**
+ * Schema cache for compiled validators
+ * Uses a Map to cache compiled schemas by their stringified representation
+ */
+export const createSchemaCache = () => {
+  const cache = new Map<string, AjvLikeValidateFunction>()
+  let hits = 0
+  let misses = 0
+
+  const generateCacheKey = (schema: AjvLikeSchemaObject): string => {
+    // Use schema.$id if available, otherwise stringify the schema
+    if (schema.$id) {
+      return schema.$id
+    }
+    // Create a stable string representation for caching
+    return JSON.stringify(schema)
+  }
+
+  const get = (
+    schema: AjvLikeSchemaObject,
+  ): AjvLikeValidateFunction | undefined => {
+    const key = generateCacheKey(schema)
+    const cached = cache.get(key)
+    if (cached) {
+      hits++
+      return cached
+    }
+    misses++
+    return undefined
+  }
+
+  const set = (
+    schema: AjvLikeSchemaObject,
+    validator: AjvLikeValidateFunction,
+  ): void => {
+    const key = generateCacheKey(schema)
+    cache.set(key, validator)
+  }
+
+  const getStats = () => ({
+    size: cache.size,
+    hits,
+    misses,
+    hitRate: hits + misses > 0 ? (hits / (hits + misses)) * 100 : 0,
+  })
+
+  const clear = () => {
+    cache.clear()
+    hits = 0
+    misses = 0
+  }
+
+  return { get, set, getStats, clear }
+}
+
+/**
+ * Wraps AJV compile method with caching
+ */
+const createCachedAjv = (ajv: AjvLike) => {
+  const schemaCache = createSchemaCache()
+  const originalCompile = ajv.compile.bind(ajv)
+
+  const cachedCompile = (
+    schema: AjvLikeSchemaObject,
+  ): AjvLikeValidateFunction => {
+    // Check cache first
+    const cached = schemaCache.get(schema)
+    if (cached) {
+      return cached
+    }
+
+    // Compile and cache
+    const validator = originalCompile(schema)
+    schemaCache.set(schema, validator)
+    return validator
+  }
+
+  return {
+    ...ajv,
+    compile: cachedCompile,
+    _schemaCache: schemaCache, // Expose cache for testing/monitoring
+  }
+}
+
 export const wingnut = (ajv: AjvLike) => {
-  const validate = validateBuilder(ajv)
+  // Wrap AJV with caching
+  const cachedAjv = createCachedAjv(ajv)
+  const validate = validateBuilder(cachedAjv)
 
   const mapRouter = (
     urtr: Router,
@@ -143,7 +234,10 @@ export const wingnut = (ajv: AjvLike) => {
       ...(requestBodyContent?.schema
         ? [
             wrapper(
-              validateHandler(ajv.compile(requestBodyContent.schema), 'body'),
+              validateHandler(
+                cachedAjv.compile(requestBodyContent.schema),
+                'body',
+              ),
             ),
           ]
         : []),
