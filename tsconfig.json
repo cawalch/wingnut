@@ -1,13 +1,20 @@
 {
   "compilerOptions": {
-    "target": "ES6",
-    "module": "CommonJs",
+    "target": "ES2022",
+    "module": "NodeNext",
     "sourceMap": true,
     "outDir": "dist",
     "removeComments": false,
-    "lib": ["es2019"],
+    "lib": ["es2022"],
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "strict": true,
+    "alwaysStrict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "moduleResolution": "nodenext"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules"]
