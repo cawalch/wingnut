@@ -1,6 +1,6 @@
 export class WingnutError extends Error {
-  constructor(message: string) {
-    super(message)
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, this.constructor)
     }
@@ -9,12 +9,12 @@ export class WingnutError extends Error {
 }
 
 export class ValidationError extends WingnutError {
-  constructor(
-    message: string,
-    public context: unknown,
-  ) {
-    super(message)
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
     this.name = 'ValidationError'
-    this.context = context
+  }
+
+  get context() {
+    return this.cause
   }
 }

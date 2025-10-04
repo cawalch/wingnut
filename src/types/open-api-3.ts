@@ -142,6 +142,6 @@ export const inMap = {
   query: 'query',
   body: 'body',
   header: 'headers',
-}
+} as const
 
-export type ParamIn = 'query' | 'path' | 'body' | 'header'
+export type ParamIn = keyof typeof inMap

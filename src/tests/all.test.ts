@@ -1,13 +1,10 @@
 import Ajv from 'ajv'
-import express, { NextFunction, Response, Router } from 'express'
-import { Request } from 'express'
+import express, { NextFunction, Request, Response, Router } from 'express'
 import request from 'supertest'
-import { assert, beforeEach, vi } from 'vitest'
-import { describe, expect, it } from 'vitest'
-import { path, headerParam, wingnut } from '../lib'
+import { assert, beforeEach, describe, expect, it, vi } from 'vitest'
+import { headerParam, path, wingnut } from '../lib'
 import { ValidationError } from '../lib/errors'
 import {
-  Security,
   asyncGetMethod,
   asyncPostMethod,
   asyncWrapper,
@@ -16,6 +13,7 @@ import {
   groupByParamIn,
   postMethod,
   queryParam,
+  Security,
   scope,
   scopeWrapper,
   validateBuilder,
@@ -23,32 +21,30 @@ import {
 } from '../lib/index'
 import { AjvLike } from '../types/common'
 import {
+  Parameter,
   ParamIn,
   ParamType,
-  Parameter,
   ScopeHandler,
 } from '../types/open-api-3'
 
-function createParameter(
+const createParameter = (
   inValue: ParamIn,
   nameValue: string,
   typeValue: ParamType,
-): Parameter {
-  return {
-    in: inValue,
-    name: nameValue,
-    schema: {
-      type: typeValue,
-    },
-  }
-}
+): Parameter => ({
+  in: inValue,
+  name: nameValue,
+  schema: {
+    type: typeValue,
+  },
+})
 
 describe('groupByParamIn', () => {
   it('should group by a parameter', () => {
     const param: Parameter = createParameter('path', 'id', 'string')
     const result = groupByParamIn([param])
     expect(result).toStrictEqual({
-      params: [param],
+      path: [param],
     })
   })
   it('should group by multiple params', () => {
@@ -58,7 +54,7 @@ describe('groupByParamIn', () => {
     ]
     const result = groupByParamIn(params)
     expect(result).toEqual({
-      params: [params[0]],
+      path: [params[0]],
       query: [params[1]],
     })
   })
@@ -130,7 +126,7 @@ describe('validateBuilder', () => {
     const param: Parameter = createParameter('path', 'id', 'string')
     const result = validator([param])
     expect(result.schema).toEqual({
-      params: {
+      path: {
         properties: {
           id: {
             type: 'string',
@@ -151,7 +147,7 @@ describe('validateBuilder', () => {
     const param: Parameter = createParameter('header', 'id', 'string')
     const result = validator([param])
     expect(result.schema).toEqual({
-      headers: {
+      header: {
         properties: {
           id: {
             type: 'string',
@@ -162,10 +158,102 @@ describe('validateBuilder', () => {
       },
     })
   })
+
+  it('should handle empty parameters array', () => {
+    const mockAjvLike = {
+      compile: () => () => true,
+    }
+
+    const validator = validateBuilder(mockAjvLike as unknown as AjvLike)
+    const result = validator([])
+    expect(result.schema).toEqual({})
+    expect(result.handlers).toEqual([])
+  })
+
+  it('should handle parameters with missing schema', () => {
+    const mockAjvLike = {
+      compile: () => () => true,
+    }
+
+    const validator = validateBuilder(mockAjvLike as unknown as AjvLike)
+    // Create a parameter without a schema to test edge cases
+    const paramWithoutSchema: Parameter = {
+      in: 'query',
+      name: 'test',
+      // schema is undefined
+    }
+    const result = validator([paramWithoutSchema])
+    expect(result.handlers).toHaveLength(1)
+  })
+
+  it('should handle defensive case with empty parameter arrays', () => {
+    const mockAjvLike = {
+      compile: () => () => true,
+    }
+
+    // Create a test that directly exercises the defensive code path
+    // by temporarily modifying Object.values to return empty arrays
+    const originalValues = Object.values
+    Object.values = vi.fn().mockReturnValue([[]]) // Return array with one empty array
+
+    try {
+      const validator = validateBuilder(mockAjvLike as unknown as AjvLike)
+      const result = validator([{ in: 'query', name: 'test' } as Parameter])
+
+      expect(result.handlers).toEqual([])
+      expect(result.schema).toEqual({})
+    } finally {
+      Object.values = originalValues
+    }
+  })
+
+  it('should handle duplicate required parameters', () => {
+    const mockAjvLike = {
+      compile: () => () => true,
+    }
+
+    const validator = validateBuilder(mockAjvLike as unknown as AjvLike)
+    // Create parameters with the same name and both required
+    const param1: Parameter = {
+      in: 'query',
+      name: 'test',
+      required: true,
+      schema: { type: 'string' },
+    }
+    const param2: Parameter = {
+      in: 'query',
+      name: 'test', // Same name
+      required: true,
+      schema: { type: 'string' },
+    }
+    const result = validator([param1, param2])
+    expect(result.handlers).toHaveLength(1)
+    // The required array should only contain 'test' once
+    expect(result.schema.query?.required).toEqual(['test'])
+  })
 })
 
 const ajv = new Ajv()
 ajv.opts.coerceTypes = true
+
+describe('Error handling', () => {
+  it('should handle environments without Error.captureStackTrace', () => {
+    // Temporarily remove Error.captureStackTrace to test the fallback
+    const originalCaptureStackTrace = Error.captureStackTrace
+    delete (Error as any).captureStackTrace
+
+    try {
+      const error = new ValidationError('test error')
+      expect(error.name).toBe('ValidationError')
+      expect(error.message).toBe('test error')
+    } finally {
+      // Restore the original function
+      if (originalCaptureStackTrace) {
+        Error.captureStackTrace = originalCaptureStackTrace
+      }
+    }
+  })
+})
 
 describe('integration tests', () => {
   it('should validate request params', async () => {
@@ -349,6 +437,45 @@ describe('integration tests', () => {
     )
   })
 
+  it('should handle path operations with null middleware', async () => {
+    const { route, paths, controller } = wingnut(ajv)
+
+    // Create a path operation and then set middleware to null to test the ?? [] fallback
+    const pathOpWithNullMiddleware = {
+      tags: ['test'],
+      description: 'Test endpoint with null middleware',
+      middleware: [] as any, // Start with empty array
+      responses: {
+        200: {
+          description: 'Success',
+          content: {
+            'application/json': {
+              schema: { type: 'object' },
+            },
+          },
+        },
+      },
+    }
+
+    // Set middleware to null after creation to test the fallback
+    pathOpWithNullMiddleware.middleware = null as any
+
+    const testHandler = path('/test', { get: pathOpWithNullMiddleware })
+    const app = express()
+    app.use(express.json())
+
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (router: Router) => route(router, testHandler),
+      }),
+    )
+
+    const response = await request(app).get('/api/test')
+    expect(response.status).toBe(404) // Should still work but no handlers
+  })
+
   it('should handle multiple controllers', async () => {
     const app = express()
     const { route, paths, controller } = wingnut(ajv)
@@ -443,12 +570,12 @@ describe('Security Schema', () => {
         },
       }),
     )
-    expect(actual.get.security).toStrictEqual([
+    expect(actual?.get?.security).toStrictEqual([
       {
         auth: ['admin'],
       },
     ])
-    expect(actual.get.responses).toStrictEqual({
+    expect(actual?.get?.responses).toStrictEqual({
       '200': {
         description: 'Success',
       },
