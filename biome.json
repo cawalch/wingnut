@@ -1,7 +1,16 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.0.6/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.2.5/schema.json",
   "vcs": { "enabled": false, "clientKind": "git", "useIgnoreFile": false },
-  "files": { "ignoreUnknown": false, "includes": ["**", "!**/dist/**"] },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": [
+      "**",
+      "!**/dist/**",
+      "!**/benchmarks/**",
+      "!**/profiler-output/**",
+      "!**/test-output/**"
+    ]
+  },
   "formatter": {
     "enabled": true,
     "useEditorconfig": true,
@@ -12,7 +21,13 @@
     "lineWidth": 80,
     "attributePosition": "auto",
     "bracketSpacing": true,
-    "includes": ["**", "!**/dist"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/benchmarks",
+      "!**/profiler-output",
+      "!**/test-output"
+    ]
   },
   "assist": { "actions": { "source": { "organizeImports": "on" } } },
   "linter": {
@@ -87,7 +102,14 @@
         "noWith": "error"
       }
     },
-    "includes": ["**", "!**/node_modules", "!**/dist"]
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/benchmarks",
+      "!**/profiler-output",
+      "!**/test-output"
+    ]
   },
   "javascript": {
     "formatter": {
