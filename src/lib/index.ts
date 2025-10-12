@@ -62,9 +62,10 @@ export const validateParams = (
     properties: {},
     required: [],
   }
+  const required = new Set<string>()
 
   for (const param of params) {
-    if (!param.schema) {
+    if (!param.schema || !schema.properties) {
       continue
     }
 
@@ -73,10 +74,12 @@ export const validateParams = (
     schema.properties[param.name] = param.schema
 
     if (param.required) {
-      if (!schema.required.includes(param.name)) {
-        schema.required.push(param.name)
-      }
+      required.add(param.name)
     }
+  }
+
+  if (required.size > 0) {
+    schema.required = [...required]
   }
 
   return schema
@@ -323,8 +326,8 @@ export const wingnut = (ajv: AjvLike) => {
         return Object.entries(pathItem).reduce<PathItem>(
           (acc, [originalPath, pathObject]) => {
             const newPathKey = `${controllerDefinition.prefix}${originalPath}`
-              .replace(/\([^()]*\)/g, '')
-              .replace(/:(\w+)/g, '{$1}')
+              .replaceAll(/\([^()]*\)/g, '')
+              .replaceAll(/:(\w+)/g, '{$1}')
             acc[newPathKey] = pathObject
             return acc
           },
@@ -354,7 +357,7 @@ export const wingnut = (ajv: AjvLike) => {
     router: Router,
     ...ctrls: ReturnType<typeof controller>[]
   ): PathItem => {
-    const acc = { out: {}, track: new Map<string, boolean>() }
+    const acc = { out: {}, track: new Set<string>() }
 
     ctrls.forEach((c) => {
       const p = c(router)
@@ -363,10 +366,9 @@ export const wingnut = (ajv: AjvLike) => {
         const method = Object.keys(item[path])[0]
         const full = `${method} ${path}`
         if (acc.track.has(full)) {
-          console.warn(`WingnutWarning: ${full} already exists`)
-        } else {
-          acc.track.set(full, true)
+          throw new Error(`WingnutError: ${full} already exists`)
         }
+        acc.track.add(full)
         Object.assign(acc.out, item)
       })
     })
@@ -500,8 +502,9 @@ export const scope = <T = string>(
   const scopeMiddlewares = scopes.map((s) => {
     const handler = security.scopes[s]
     if (!handler) {
-      console.error(`WingnutError: Scope '${s}' not found in security.scopes`)
-      throw new Error(`Scope '${s}' not found`)
+      throw new Error(
+        `WingnutError: Scope '${String(s)}' not found in security.scopes`,
+      )
     }
     return handler
   })
@@ -671,7 +674,7 @@ type WnTDataDef<S, D extends Record<string, unknown>> = S extends {
                     ? WnDataType<S['schema']>
                     : S extends { type: 'object' }
                       ? Record<string, unknown>
-                      : null
+                      : unknown
 
 export type WnDataType<S> = WnTDataDef<S, Record<string, never>>
 

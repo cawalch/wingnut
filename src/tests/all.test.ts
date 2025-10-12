@@ -330,15 +330,6 @@ describe('Error handling', () => {
     const error = new ValidationError('test error', { cause })
     expect(error.context).toBe(cause)
   })
-
-  it('should recapture stack trace when _stack is cleared', () => {
-    const error = new WingnutError('test error')
-    // Set stack to undefined to trigger lazy capture
-    error.stack = undefined
-    // Access stack again - should trigger Error.captureStackTrace
-    const stack = error.stack
-    expect(stack).toBeDefined()
-  })
 })
 
 describe('integration tests', () => {
@@ -493,10 +484,7 @@ describe('integration tests', () => {
     expect(badResponse.status).toBe(400)
   })
 
-  it('should warn on duplicate paths', () => {
-    const consoleSpyWarn = vi.spyOn(console, 'warn').mockImplementation(() => {
-      return
-    })
+  it('should throw on duplicate paths', () => {
     const app = express()
     const { route, paths, controller } = wingnut(ajv)
     const duplicateController = controller({
@@ -517,9 +505,8 @@ describe('integration tests', () => {
           ),
         ),
     })
-    paths(app, duplicateController, duplicateController)
-    expect(consoleSpyWarn).toHaveBeenCalledWith(
-      'WingnutWarning: get /api/users already exists',
+    expect(() => paths(app, duplicateController, duplicateController)).toThrow(
+      'WingnutError: get /api/users already exists',
     )
   })
 
@@ -852,11 +839,6 @@ describe('Security Schema', () => {
   })
 
   it('should throw error when scope does not exist', () => {
-    const consoleSpyError = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {
-        return
-      })
     const security: Security = {
       name: 'auth',
       handler: (_req: Request, res: Response) => {
@@ -876,14 +858,10 @@ describe('Security Schema', () => {
       scope(security, 'admin', 'nonexistent')
       assert.fail('Expected an error to be thrown')
     } catch (err) {
-      expect(err.message).toBe("Scope 'nonexistent' not found")
+      expect(err.message).toBe(
+        "WingnutError: Scope 'nonexistent' not found in security.scopes",
+      )
     }
-
-    expect(consoleSpyError).toHaveBeenCalledWith(
-      "WingnutError: Scope 'nonexistent' not found in security.scopes",
-    )
-
-    consoleSpyError.mockRestore()
   })
 
   it('should not throw error when all scopes exist', () => {

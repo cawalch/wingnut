@@ -17,4 +17,9 @@ export type AjvLike = {
   compile: (schema: Record<string, unknown>) => AjvLikeValidateFunction
 }
 
-export type AjvLikeSchemaObject = any
+export interface AjvLikeSchemaObject extends Record<string, unknown> {
+  $id?: string
+  type?: 'object' | 'string' | 'number' | 'array' | 'boolean' | 'integer'
+  properties?: Record<string, unknown>
+  required?: readonly string[]
+}
