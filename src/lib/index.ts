@@ -251,10 +251,12 @@ export const wingnut = (ajv: AjvLike) => {
     ]
 
     // Type assertion for router method access
-    ;(urtr as unknown as Record<string, (...args: any[]) => void>)[method](
-      path,
-      ...middle,
-    )
+    if (middle.length > 0) {
+      ;(urtr as unknown as Record<string, (...args: any[]) => void>)[method](
+        path,
+        ...middle,
+      )
+    }
   }
 
   const handleScopes = (
