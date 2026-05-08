@@ -11,14 +11,15 @@
 
 ### BUG-2: `paths()` duplicate detection only checks the first method of a PathObject
 - **File:** `src/lib/index.ts:363-367`
-- **Status:** 🔧 In Progress
+- **Status:** ✅ Fixed (merged via PR #60)
 - **Branch:** `bugfix/BUG-2-paths-duplicate-detection-first-method-only`
 - `Object.keys(item[path])[0]` only inspects the first HTTP method. Additional methods bypass the duplicate check.
 - **Impact:** Silent route conflicts, undefined routing behavior.
 
 ### BUG-3: `authPathOp` only applies security to the first method
 - **File:** `src/lib/index.ts:542-553`
-- **Status:** 📋 Pending
+- **Status:** 🔧 In Progress
+- **Branch:** `bugfix/BUG-3-authpathop-only-secures-first-method`
 - `const [[method, operation]] = Object.entries(pathObject)` destructures only the first entry. Remaining methods are silently unprotected (dropped from returned PathObject).
 - **Impact:** Security middleware silently not applied to additional methods.
 

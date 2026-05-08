@@ -546,14 +546,16 @@ export const scope = <T = string>(
 export const authPathOp =
   (scope: ScopeObject) =>
   (pathObject: PathObject): PathObject => {
-    const [[method, operation]] = Object.entries(pathObject)
-    const newOperation: PathOperation = {
-      ...operation,
-      security: [{ [scope.auth]: scope.scopes }],
-      scope: [scope],
-      responses: { ...operation.responses, ...scope.responses },
+    const result: PathObject = {}
+    for (const [method, operation] of Object.entries(pathObject)) {
+      ;(result as Record<string, PathOperation>)[method] = {
+        ...operation,
+        security: [{ [scope.auth]: scope.scopes }],
+        scope: [scope],
+        responses: { ...operation.responses, ...scope.responses },
+      }
     }
-    return { [method]: newOperation }
+    return result
   }
 
 /**
