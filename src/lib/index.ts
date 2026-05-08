@@ -448,7 +448,7 @@ export const method =
 export const scopeWrapper =
   (cb: RequestHandler, scopes: ScopeHandler[]) =>
   (req: Request, res: Response, next: NextFunction) => {
-    const isAuthorized = scopes.some((v) => v(req, res, next))
+    const isAuthorized = scopes.some((v) => v(req, res))
     if (isAuthorized) {
       next()
     } else {
