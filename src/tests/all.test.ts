@@ -510,6 +510,57 @@ describe('integration tests', () => {
     )
   })
 
+  it('should detect duplicate paths across all methods, not just the first', () => {
+    const app = express()
+    const { route, paths, controller } = wingnut(ajv)
+
+    // First controller: registers GET and POST on /api/users
+    const ctrl1 = controller({
+      prefix: '/api',
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            '/users',
+            getMethod({
+              middleware: [
+                (_req: Request, res: Response) => res.status(200).send('get'),
+              ],
+            }),
+            postMethod({
+              middleware: [
+                (_req: Request, res: Response) => res.status(200).send('post'),
+              ],
+            }),
+          ),
+        ),
+    })
+
+    // Second controller: registers POST on same path — should be caught as duplicate
+    const ctrl2 = controller({
+      prefix: '/api',
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            '/users',
+            postMethod({
+              middleware: [
+                (_req: Request, res: Response) => res.status(200).send('post2'),
+              ],
+            }),
+          ),
+        ),
+    })
+
+    // GET /api/users from ctrl1 is the first method in the merged PathObject.
+    // POST /api/users appears in both but was not detected because only
+    // Object.keys(item[path])[0] was checked.
+    expect(() => paths(app, ctrl1, ctrl2)).toThrow(
+      'WingnutError: post /api/users already exists',
+    )
+  })
+
   it('should handle path operations with null middleware', async () => {
     const { route, paths, controller } = wingnut(ajv)
 
