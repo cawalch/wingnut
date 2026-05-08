@@ -708,6 +708,43 @@ describe('Security Schema', () => {
       },
     })
   })
+
+  it('should apply security to all methods in a multi-method PathObject', () => {
+    const auth: Security = {
+      name: 'auth',
+      handler: (_req: Request, res: Response) => {
+        res.status(400).send('Not Auth')
+      },
+      scopes: {
+        admin: UserLevel(100),
+      },
+      responses: {
+        '400': {
+          description: 'Not Auth',
+        },
+      },
+    }
+
+    const adminAuth = authPathOp(scope(auth, 'admin'))
+
+    // Pass a PathObject with multiple methods
+    const actual = adminAuth({
+      get: {
+        middleware: [routeHandler],
+        responses: { '200': { description: 'Get success' } },
+      },
+      post: {
+        middleware: [routeHandler],
+        responses: { '201': { description: 'Created' } },
+      },
+    })
+
+    // Both methods should have security applied
+    expect(actual?.get?.security).toStrictEqual([{ auth: ['admin'] }])
+    expect(actual?.get?.scope).toBeDefined()
+    expect(actual?.post?.security).toStrictEqual([{ auth: ['admin'] }])
+    expect(actual?.post?.scope).toBeDefined()
+  })
   it('should call the error middleware if provided', async () => {
     const app = express()
     const { route, paths, controller } = wingnut(ajv)
