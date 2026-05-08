@@ -4,14 +4,15 @@
 
 ### BUG-1: `scopeWrapper` passes `next` to scope handlers — double `next()` calls
 - **File:** `src/lib/index.ts:446-455`
-- **Status:** 🔧 In Progress
+- **Status:** ✅ Fixed (merged via #59)
 - **Branch:** `bugfix/BUG-1-scope-wrapper-double-next`
 - Every `ScopeHandler` receives Express `next` as its 3rd argument. If a scope handler both returns `true` AND calls `next()`, the middleware chain advances twice. Since `some()` passes `next` to every scope until one returns `true`, a failing scope handler could also call `next()` prematurely.
 - **Impact:** Duplicate handler execution, double responses, or "headers already sent" errors.
 
 ### BUG-2: `paths()` duplicate detection only checks the first method of a PathObject
 - **File:** `src/lib/index.ts:363-367`
-- **Status:** 📋 Pending
+- **Status:** 🔧 In Progress
+- **Branch:** `bugfix/BUG-2-paths-duplicate-detection-first-method-only`
 - `Object.keys(item[path])[0]` only inspects the first HTTP method. Additional methods bypass the duplicate check.
 - **Impact:** Silent route conflicts, undefined routing behavior.
 

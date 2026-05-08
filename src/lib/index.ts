@@ -365,12 +365,14 @@ export const wingnut = (ajv: AjvLike) => {
       const p = c(router)
       p.forEach((item) => {
         const path = Object.keys(item)[0]
-        const method = Object.keys(item[path])[0]
-        const full = `${method} ${path}`
-        if (acc.track.has(full)) {
-          throw new Error(`WingnutError: ${full} already exists`)
+        const methods = Object.keys(item[path])
+        for (const method of methods) {
+          const full = `${method} ${path}`
+          if (acc.track.has(full)) {
+            throw new Error(`WingnutError: ${full} already exists`)
+          }
+          acc.track.add(full)
         }
-        acc.track.add(full)
         Object.assign(acc.out, item)
       })
     })
