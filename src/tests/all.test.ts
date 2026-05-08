@@ -925,6 +925,37 @@ describe('ScopeWrapper', () => {
     expect(cb).toHaveBeenCalledTimes(1)
     expect(next).not.toHaveBeenCalled()
   })
+
+  it('should not pass next to scope handlers — prevents double next()', () => {
+    const scopeThatAlsoCallsNext: ScopeHandler = (
+      _req: Request,
+      _res: Response,
+      next?: () => void,
+    ): boolean => {
+      next?.()
+      return true
+    }
+    const scopes = [scopeThatAlsoCallsNext]
+    scopeWrapper(cb, scopes)(req, res, next)
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(cb).not.toHaveBeenCalled()
+  })
+
+  it('should not let a failing scope handler call next prematurely', () => {
+    const failingScopeThatCallsNext: ScopeHandler = (
+      _req: Request,
+      _res: Response,
+      next?: () => void,
+    ): boolean => {
+      next?.()
+      return false
+    }
+    const passingScope: ScopeHandler = (): boolean => true
+    const scopes = [failingScopeThatCallsNext, passingScope]
+    scopeWrapper(cb, scopes)(req, res, next)
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(cb).not.toHaveBeenCalled()
+  })
 })
 
 describe('asyncWrapper', () => {
