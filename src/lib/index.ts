@@ -139,11 +139,6 @@ export const createSchemaCache = () => {
   let misses = 0
 
   const generateCacheKey = (schema: AjvLikeSchemaObject): string => {
-    // Use schema.$id if available, otherwise stringify the schema
-    if (schema.$id) {
-      return schema.$id
-    }
-    // Create a stable string representation for caching
     return JSON.stringify(schema)
   }
 

@@ -18,14 +18,15 @@
 
 ### BUG-3: `authPathOp` only applies security to the first method
 - **File:** `src/lib/index.ts:542-553`
-- **Status:** 🔧 In Progress
+- **Status:** ✅ Fixed (merged via PR #61)
 - **Branch:** `bugfix/BUG-3-authpathop-only-secures-first-method`
 - `const [[method, operation]] = Object.entries(pathObject)` destructures only the first entry. Remaining methods are silently unprotected (dropped from returned PathObject).
 - **Impact:** Security middleware silently not applied to additional methods.
 
 ### BUG-4: Schema cache key collision via `$id` — wrong validator returned
 - **File:** `src/lib/index.ts:141-148`
-- **Status:** 📋 Pending
+- **Status:** 🔧 In Progress
+- **Branch:** `bugfix/BUG-4-schema-cache-id-collision`
 - Two structurally different schemas with the same `$id` produce the same cache key, returning the wrong compiled validator.
 - **Impact:** Incorrect request validation — bad data passes, valid data rejected.
 
