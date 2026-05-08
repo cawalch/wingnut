@@ -1733,26 +1733,28 @@ describe('createSchemaCache', () => {
     expect(result).toBeUndefined()
   })
 
-  it('should use $id for cache key when available', () => {
+  it('should cache schemas by structure, not by $id alone', () => {
     const cache = createSchemaCache()
     const mockValidator1 = vi.fn().mockReturnValue(true)
+    const mockValidator2 = vi.fn().mockReturnValue(false)
 
-    const schemaWithId = {
-      $id: 'unique-id',
+    const schemaA = {
+      $id: 'shared-id',
       type: 'string' as const,
     }
 
-    const sameIdDifferentSchema = {
-      $id: 'unique-id',
-      type: 'number' as const, // Different type but same $id
+    const schemaB = {
+      $id: 'shared-id',
+      type: 'number' as const,
     }
 
-    // Set with first schema
-    cache.set(schemaWithId, mockValidator1)
+    cache.set(schemaA, mockValidator1)
+    cache.set(schemaB, mockValidator2)
 
-    // Get with different schema but same $id - should return same validator
-    const result = cache.get(sameIdDifferentSchema)
-    expect(result).toBe(mockValidator1)
+    // Same $id but different structure — must return the correct validator
+    expect(cache.get(schemaA)).toBe(mockValidator1)
+    expect(cache.get(schemaB)).toBe(mockValidator2)
+    expect(cache.getStats().size).toBe(2)
   })
 
   it('should use JSON.stringify for cache key when $id is not available', () => {
