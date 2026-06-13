@@ -23,7 +23,7 @@
     "@vitest/coverage-v8": "^4.0.16",
     "@vitest/ui": "^4.0.16",
     "ajv-formats": "^3.0.1",
-    "esbuild": "^0.25.10",
+    "esbuild": "^0.28.1",
     "express": "^5.2.1",
     "supertest": "^7.1.4",
     "typescript": "^5.9.3",
