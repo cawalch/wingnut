@@ -196,13 +196,13 @@ import {
   ParamSchema,
 } from "wingnut";
 
-interface UserAuth extends Request {
-  user?: { level: number };
-}
+// The user shape lives in the generic — no manual `extends Request` interface.
+type AppUser = { id: string; level: number };
 
 // A Security: extraction in `before`, verification via `verify`, the correct
 // securityScheme on `scheme`, and a 401 slot — all from one config.
-const auth = bearerAuth({
+// bearerAuth<Scopes, User> threads the type through to verify + scope handlers.
+const auth = bearerAuth<"admin", AppUser>({
   // name is the securityScheme key each operation references
   name: "bearerAuth",
   description: "JWT access token",
@@ -210,15 +210,16 @@ const auth = bearerAuth({
   // caller-supplied verification — false or a throw → 401
   verify: (token, req) => {
     try {
-      (req as UserAuth).user = verifyJwt(token); // your JWT lib
+      req.user = verifyJwt(token); // your JWT lib — req.user is AppUser | undefined
       return true;
     } catch {
       return false;
     }
   },
   // authorization half — scope handlers evaluated with OR semantics
+  // req.user is typed from the generic — no cast needed
   scopes: {
-    admin: (req) => ((req as UserAuth).user?.level ?? 0) >= 100,
+    admin: (req) => (req.user?.level ?? 0) >= 100,
   },
 });
 
@@ -263,18 +264,18 @@ const schemes = securitySchemes(auth);
 import { apiKey, oauth2 } from "wingnut";
 
 // API key in a header (also: in: "query" | "cookie"; cookie needs cookie-parser)
-const key = apiKey({
+const key = apiKey<"admin", AppUser>({
   name: "apiKey",
   in: "header",
   fieldName: "X-API-Key",
   verify: (value, req) => {
-    (req as UserAuth).user = lookupKey(value);
+    req.user = lookupKey(value); // req.user is AppUser | undefined
     return !!req.user;
   },
 });
 
 // OAuth 2.0 — bearer extraction + flow documentation
-const oauth = oauth2({
+const oauth = oauth2<"admin", AppUser>({
   name: "oauth2",
   flows: {
     authorizationCode: {
@@ -284,7 +285,7 @@ const oauth = oauth2({
     },
   },
   verify: (token, req) => {
-    (req as UserAuth).user = verifyAccessToken(token);
+    req.user = verifyAccessToken(token);
     return !!req.user;
   },
 });
@@ -293,6 +294,21 @@ const oauth = oauth2({
 Wingnut ships **no** JWT/OAuth/session library — bring your own crypto. The
 scheme builders compose the middleware and document the scheme; you supply
 `verify` and populate `req.user`.
+
+### Typed auth context (Layer 3)
+
+Each builder accepts `<Scopes, User>` generics that flow to `verify` and
+scope handlers — no manual `extends Request` interfaces or casts. Derive the
+authed-request shape in your handlers with `WnAuthType`:
+
+```typescript
+import { WnAuthType } from "wingnut";
+
+type Authed = WnAuthType<typeof auth>; // Request & { user?: AppUser }
+
+const me: Authed = /* ... */;
+me.user?.id; // string | undefined — typed, no cast
+```
 
 ### Low-level `Security`
 

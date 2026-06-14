@@ -1,10 +1,25 @@
 import { ErrorRequestHandler, Request, RequestHandler, Response } from 'express'
 // open api 3 typings
 
-export type NamedHandler<S> = Record<
+export type NamedHandler<S = string, User = unknown> = Record<
   S extends string ? S : string,
-  ScopeHandler
+  ScopeHandler<User>
 >
+
+/**
+ * A request carrying an optional auth context — the shape scope handlers and
+ * `verify` see. `User` defaults to `unknown`, so `req.user` typing is opt-in
+ * (Layer 3). Populate it via `Security<User>` / the scheme builders.
+ */
+export type AuthedRequest<User = unknown> = Request & { user?: User }
+
+/**
+ * Authorization scope predicate. Returns `true` when the request satisfies the
+ * scope. `req.user` is typed when the owning `Security<User>` carries `User`.
+ */
+export interface ScopeHandler<User = unknown> {
+  (req: AuthedRequest<User>, res: Response, next?: () => void): boolean
+}
 
 export interface AppObject {
   openapi: string
@@ -98,10 +113,6 @@ export interface PathObject {
 export type SecurityObject = {
   [auth: string]: string[]
 }[]
-
-export interface ScopeHandler {
-  (req: Request, res: Response, next?: () => void): boolean
-}
 
 export type ScopeObject<S = string> = {
   auth: string

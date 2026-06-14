@@ -727,23 +727,17 @@ describe('integration tests', () => {
   })
 })
 
-interface UserAuth extends Request {
-  user?: {
-    level: number
-  }
-}
-
 describe('Security Schema', () => {
   const UserLevel =
-    (minLevel: number): ScopeHandler =>
-    (req: UserAuth): boolean =>
+    (minLevel: number): ScopeHandler<{ level: number }> =>
+    (req): boolean =>
       (req.user?.level ?? 0) > minLevel
   const routeHandler = () => {
     return
   }
 
   it('should scope request to a user level', () => {
-    const auth: Security = {
+    const auth: Security<string, { level: number }> = {
       name: 'auth',
       forbidden: (_req: Request, res: Response) => {
         res.status(403).send('Forbidden')
@@ -785,7 +779,7 @@ describe('Security Schema', () => {
   })
 
   it('should apply security to all methods in a multi-method PathObject', () => {
-    const auth: Security = {
+    const auth: Security<string, { level: number }> = {
       name: 'auth',
       forbidden: (_req: Request, res: Response) => {
         res.status(403).send('Forbidden')
@@ -944,7 +938,7 @@ describe('Security Schema', () => {
   })
   it('should call the before security middleware if provided', async () => {
     let calledBefore = false
-    const auth: Security = {
+    const auth: Security<string, { level: number }> = {
       name: 'auth',
       before: (_req: Request, _res: Response, next: NextFunction) => {
         calledBefore = true
