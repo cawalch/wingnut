@@ -187,6 +187,7 @@ import {
   scope,
   Security,
   authPathOp,
+  securitySchemes,
   ScopeHandler,
   putMethod,
   ParamSchema,
@@ -202,24 +203,31 @@ const userLevelAuth =
   (req: UserAuth): boolean =>
     (req.user?.level ?? 0) >= minLevel;
 
-// Build Authorization Security object
+// A Security definition: enforcement middleware + OpenAPI docs in one place,
+// so the guards and the documentation cannot drift.
 const auth: Security = {
-  name: "user level authorization",
-  // handler if user is not authenticated
-  handler: (_req: Request, res: Response) => {
-    res.status(400).send("Not Authorized");
+  // name is the securityScheme key each operation references
+  name: "bearerAuth",
+  // OpenAPI securityScheme, emitted into components.securitySchemes
+  scheme: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
+  // optional 401 handler — invoked when authentication fails
+  // (missing/invalid token). Verify the token in a `before` hook.
+  unauthorized: (_req: Request, res: Response) => {
+    res.status(401).send("Unauthenticated");
+  },
+  // 403 handler — invoked when authenticated but the scope check fails
+  forbidden: (_req: Request, res: Response) => {
+    res.status(403).send("Forbidden");
   },
   scopes: {
-    // define OpenAPI security scopes based on user levels
-    // these can be referenced with wingnut's Scope
+    // OpenAPI security scopes, evaluated with OR semantics
     admin: userLevelAuth(100),
     user: userLevelAuth(10),
   },
-  // response schema for authorization failure
+  // response schemas surfaced on each secured operation
   responses: {
-    "400": {
-      description: "Not Authorized",
-    },
+    "401": { description: "Unauthenticated" },
+    "403": { description: "Forbidden" },
   },
 };
 
@@ -257,11 +265,21 @@ const editUserAPI = adminAuth(
       },
     },
     middleware: [
-      // express.js RequestHandler requires admin authentication now
+      // express.js RequestHandler — admin-scoped automatically
     ],
   }),
 );
+
+// Emit components.securitySchemes so per-operation security references
+// resolve in Swagger UI / Redoc / Schemathesis. Securities without a
+// scheme are skipped.
+const schemes = securitySchemes(auth);
+// → { bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" } }
 ```
+
+Wingnut ships **no** JWT/OAuth/session library — bring your own crypto. Verify
+the token in a `before` hook and populate `req.user`; wingnut only composes
+the middleware and documents the scheme.
 
 ## Type-Safe Request Values
 
@@ -362,11 +380,14 @@ type Body = WnDataType<{
 ```typescript
 import express from 'express';
 import Ajv from 'ajv';
-import { PathItem, wingnut } from 'wingnut';
+import { PathItem, wingnut, securitySchemes, Security } from 'wingnut';
 import swaggerUI from 'swagger-ui-express';
 
 const ajv = new Ajv();
 ajv.opts.coerceTypes = true;
+
+// `auth` is the Security definition from "Secure Routes with Scopes"
+const securities: Security[] = [auth];
 
 // base swagger document
 const swaggerPath = (paths: PathItem) => ({
@@ -377,6 +398,7 @@ const swaggerPath = (paths: PathItem) => ({
     description: 'My App Swagger Doc',
   },
   paths,
+  components: { securitySchemes: securitySchemes(...securities) },
 })
 
 const { route, paths, controller } = wingnut(ajv)

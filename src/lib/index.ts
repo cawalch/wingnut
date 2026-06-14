@@ -24,6 +24,8 @@ import {
   PathOperation,
   ScopeHandler,
   ScopeObject,
+  SecuritySchemeObject,
+  SecuritySchemesObject,
 } from '../types/open-api-3'
 import { ValidationError } from './errors'
 
@@ -36,8 +38,30 @@ export type ValidateByParam = Record<
 
 export interface Security<S = string> {
   name: string
+  /**
+   * OpenAPI Security Scheme documentation for this definition. Emitted into
+   * `components.securitySchemes` by `securitySchemes()` so per-operation
+   * `security` references resolve in Swagger UI / Redoc / Schemathesis.
+   */
+  scheme?: SecuritySchemeObject
+  /**
+   * Credential-extraction / pre-authorization hook (e.g. parse + verify a
+   * token and populate `req.user`). Runs before scope evaluation.
+   */
   before?: RequestHandler
-  handler: RequestHandler
+  /**
+   * Unauthenticated (401) handler. Invoked when credential extraction
+   * reports a missing or invalid credential — e.g. a Layer 1 `bearerAuth`
+   * `verify` returning `false`. Optional at Layer 0: when omitted, `before`
+   * owns its own failure response.
+   */
+  unauthorized?: RequestHandler
+  /**
+   * Forbidden (403) handler. Invoked when the caller is authenticated but
+   * lacks every required scope. Replaces the legacy `handler` field so the
+   * 401/403 distinction is explicit on the definition.
+   */
+  forbidden: RequestHandler
   scopes: NamedHandler<S>
   responses?: MediaSchemaItem
 }
@@ -486,22 +510,25 @@ export const scopeWrapper =
  * // authorization middleware based on user level
  * const userLevel = (minLevel: number): ScopeHandler => (
  *    req: UserAuth
- * ): boolean => req.user.level > minLevel
+ * ): boolean => (req.user?.level ?? 0) > minLevel
  *
+ * // authorization security definition
  * const auth: Security = {
  *  name: 'auth',
- *  handler: (_req: Request, res: Response) => {
- *    // unauthorized handler
- *    res.status(400).send('Not Auth')
+ *  // OpenAPI security scheme doc, emitted into components.securitySchemes
+ *  scheme: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+ *  // 403 forbidden handler (authenticated but missing scope)
+ *  forbidden: (_req: Request, res: Response) => {
+ *    res.status(403).send('Forbidden')
  *  },
  *  scopes: {
  *    admin: userLevel(100),
  *    moderator: userLevel(50)
  *  },
  *  responses: {
- *  '400': {
- *    description: 'Not Auth'
- *   }
+ *    '403': {
+ *      description: 'Forbidden'
+ *    }
  *  }
  * }
  *
@@ -528,7 +555,7 @@ export const scope = <T = string>(
     scopes,
     middleware: [
       ...(security.before ? [security.before] : []),
-      scopeWrapper(security.handler, scopeMiddlewares),
+      scopeWrapper(security.forbidden, scopeMiddlewares),
     ],
     responses: security.responses,
   }
@@ -567,6 +594,43 @@ export const authPathOp =
     }
     return result
   }
+
+/**
+ * securitySchemes
+ *
+ * Build the OpenAPI `components.securitySchemes` map from one or more
+ * `Security` definitions, keyed by `security.name`. Securities without a
+ * `scheme` are skipped, so per-operation `security` references resolve to a
+ * real scheme definition in the served spec (Swagger UI, Redoc, Schemathesis).
+ *
+ * ```typescript
+ * const auth: Security = {
+ *   name: 'bearerAuth',
+ *   scheme: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+ *   forbidden: (_req, res) => res.status(403).send('Forbidden'),
+ *   scopes: { admin: (req) => (req.user?.level ?? 0) >= 100 },
+ *   responses: { '403': { description: 'Forbidden' } },
+ * }
+ *
+ * const spec = {
+ *   openapi: '3.0.0',
+ *   info: { version: '1.0.0', title: 'API' },
+ *   paths,
+ *   components: { securitySchemes: securitySchemes(auth) },
+ * }
+ * ```
+ */
+export const securitySchemes = (
+  ...securities: Security[]
+): SecuritySchemesObject => {
+  const schemes: SecuritySchemesObject = {}
+  for (const security of securities) {
+    if (security.scheme) {
+      schemes[security.name] = security.scheme
+    }
+  }
+  return schemes
+}
 
 /**
  * Create a parameter schema with the given `in` location.
