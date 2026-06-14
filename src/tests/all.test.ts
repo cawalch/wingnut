@@ -1,5 +1,11 @@
 import Ajv from 'ajv'
-import express, { NextFunction, Request, Response, Router } from 'express'
+import express, {
+  NextFunction,
+  Request,
+  RequestHandler,
+  Response,
+  Router,
+} from 'express'
 import request from 'supertest'
 import { assert, beforeEach, describe, expect, it, vi } from 'vitest'
 import { app, createSchemaCache, headerParam, path, wingnut } from '../lib'
@@ -19,7 +25,7 @@ import {
   validateBuilder,
   validateParams,
 } from '../lib/index'
-import { AjvLike } from '../types/common'
+import { AjvLike, AjvLikeValidateFunction } from '../types/common'
 import {
   Parameter,
   ParamIn,
@@ -45,6 +51,7 @@ describe('app', () => {
       info: {
         title: 'Test API',
         version: '1.0.0',
+        description: 'Test API',
       },
       openapi: '3.0.0',
       paths: {},
@@ -574,7 +581,7 @@ describe('integration tests', () => {
           description: 'Success',
           content: {
             'application/json': {
-              schema: { type: 'object' },
+              schema: { type: 'object' as const },
             },
           },
         },
@@ -946,7 +953,7 @@ describe('Security Schema', () => {
       scope(security, 'admin', 'nonexistent')
       assert.fail('Expected an error to be thrown')
     } catch (err) {
-      expect(err.message).toBe(
+      expect((err as Error).message).toBe(
         "WingnutError: Scope 'nonexistent' not found in security.scopes",
       )
     }
@@ -1002,14 +1009,22 @@ describe('ScopeWrapper', () => {
 
   it('should call next() when a scope passes its test', () => {
     const scopes = [() => false, () => true]
-    scopeWrapper(cb, scopes)(req, res, next)
+    scopeWrapper(cb as unknown as RequestHandler, scopes)(
+      req,
+      res,
+      next as unknown as NextFunction,
+    )
     expect(next).toHaveBeenCalledTimes(1)
     expect(cb).not.toHaveBeenCalled()
   })
 
   it('should call cb when no scope passes its test', () => {
     const scopes = [() => false, () => false]
-    scopeWrapper(cb, scopes)(req, res, next)
+    scopeWrapper(cb as unknown as RequestHandler, scopes)(
+      req,
+      res,
+      next as unknown as NextFunction,
+    )
     expect(cb).toHaveBeenCalledTimes(1)
     expect(next).not.toHaveBeenCalled()
   })
@@ -1024,7 +1039,11 @@ describe('ScopeWrapper', () => {
       return true
     }
     const scopes = [scopeThatAlsoCallsNext]
-    scopeWrapper(cb, scopes)(req, res, next)
+    scopeWrapper(cb as unknown as RequestHandler, scopes)(
+      req,
+      res,
+      next as unknown as NextFunction,
+    )
     expect(next).toHaveBeenCalledTimes(1)
     expect(cb).not.toHaveBeenCalled()
   })
@@ -1040,7 +1059,11 @@ describe('ScopeWrapper', () => {
     }
     const passingScope: ScopeHandler = (): boolean => true
     const scopes = [failingScopeThatCallsNext, passingScope]
-    scopeWrapper(cb, scopes)(req, res, next)
+    scopeWrapper(cb as unknown as RequestHandler, scopes)(
+      req,
+      res,
+      next as unknown as NextFunction,
+    )
     expect(next).toHaveBeenCalledTimes(1)
     expect(cb).not.toHaveBeenCalled()
   })
@@ -1049,14 +1072,13 @@ describe('ScopeWrapper', () => {
 describe('asyncWrapper', () => {
   it('wraps normal RequestHandler', async () => {
     let called = false
-    const reqHandler = (
+    const reqHandler = async (
       _req: Request,
       _res: Response,
       next: NextFunction,
     ): Promise<void> => {
       called = true
       next()
-      return
     }
     const wrapped = asyncWrapper(reqHandler)
     const app = express()
@@ -1070,7 +1092,7 @@ describe('asyncWrapper', () => {
 
   it('wraps Error RequestHandler', async () => {
     let called = false
-    const reqHandler = (
+    const reqHandler = async (
       _err: Error,
       _req: Request,
       _res: Response,
@@ -1078,7 +1100,6 @@ describe('asyncWrapper', () => {
     ): Promise<void> => {
       called = true
       next()
-      return
     }
     const wrapped = asyncWrapper(reqHandler)
     const app = express()
@@ -1098,7 +1119,7 @@ describe('asyncWrapper', () => {
 
   it('catches next thrown await exception', async () => {
     let called = 0
-    const reqHandler = (
+    const reqHandler = async (
       err: Error,
       _req: Request,
       _res: Response,
@@ -1106,7 +1127,6 @@ describe('asyncWrapper', () => {
     ): Promise<void> => {
       called++
       next(err)
-      return
     }
     const wrapped = asyncWrapper(reqHandler)
     const app = express()
@@ -1355,7 +1375,7 @@ describe('Schema Caching', () => {
 
   it('should cache schemas with $id property', async () => {
     const compileCallCount = { count: 0 }
-    const mockCompile = vi.fn((schema) => {
+    const mockCompile = vi.fn((_schema) => {
       compileCallCount.count++
       return () => true
     })
@@ -1672,7 +1692,9 @@ describe('Schema Caching', () => {
 describe('createSchemaCache', () => {
   it('should cache validators and track hits/misses', () => {
     const cache = createSchemaCache()
-    const mockValidator = vi.fn().mockReturnValue(true)
+    const mockValidator = vi
+      .fn()
+      .mockReturnValue(true) as unknown as AjvLikeValidateFunction
 
     const schema = {
       $id: 'test-schema',
@@ -1703,7 +1725,9 @@ describe('createSchemaCache', () => {
 
   it('should clear cache and reset stats', () => {
     const cache = createSchemaCache()
-    const mockValidator = vi.fn().mockReturnValue(true)
+    const mockValidator = vi
+      .fn()
+      .mockReturnValue(true) as unknown as AjvLikeValidateFunction
 
     const schema = {
       type: 'string' as const,
@@ -1735,8 +1759,12 @@ describe('createSchemaCache', () => {
 
   it('should cache schemas by structure, not by $id alone', () => {
     const cache = createSchemaCache()
-    const mockValidator1 = vi.fn().mockReturnValue(true)
-    const mockValidator2 = vi.fn().mockReturnValue(false)
+    const mockValidator1 = vi
+      .fn()
+      .mockReturnValue(true) as unknown as AjvLikeValidateFunction
+    const mockValidator2 = vi
+      .fn()
+      .mockReturnValue(false) as unknown as AjvLikeValidateFunction
 
     const schemaA = {
       $id: 'shared-id',
@@ -1759,7 +1787,9 @@ describe('createSchemaCache', () => {
 
   it('should use JSON.stringify for cache key when $id is not available', () => {
     const cache = createSchemaCache()
-    const mockValidator = vi.fn().mockReturnValue(true)
+    const mockValidator = vi
+      .fn()
+      .mockReturnValue(true) as unknown as AjvLikeValidateFunction
 
     const schema1 = {
       type: 'string' as const,
@@ -1787,7 +1817,9 @@ describe('createSchemaCache', () => {
 
   it('should calculate hit rate correctly with only hits', () => {
     const cache = createSchemaCache()
-    const mockValidator = vi.fn().mockReturnValue(true)
+    const mockValidator = vi
+      .fn()
+      .mockReturnValue(true) as unknown as AjvLikeValidateFunction
     const schema = { type: 'string' as const }
 
     cache.set(schema, mockValidator)
