@@ -629,8 +629,6 @@ export const asyncPutMethod = asyncMethod('put', asyncWrapper)
 
 export const asyncDeleteMethod = asyncMethod('delete', asyncWrapper)
 
-// Request-typing helpers live in ./types/wn-data (pure type-level, zero deps).
-// Re-exported here to preserve the public `wingnut` surface.
 export type {
   WnDataType,
   WnNumberType,
