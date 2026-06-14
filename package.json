@@ -18,7 +18,7 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.2.5",
+    "@biomejs/biome": "2.5.0",
     "@types/express": "^5.0.3",
     "@types/node": "^24.6.2",
     "@types/supertest": "^6.0.3",
