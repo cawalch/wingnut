@@ -396,17 +396,25 @@ export const asyncMethod =
     [m]: { wrapper, ...pop },
   })
 
-type AsyncRequestHandler = (
-  ...args:
-    | [Request, Response]
-    | [Request, Response, NextFunction]
-    | [Error, Request, Response, NextFunction]
-) => Promise<void>
+type AsyncRequestHandler =
+  | ((req: Request, res: Response, next: NextFunction) => Promise<void>)
+  | ((
+      err: Error,
+      req: Request,
+      res: Response,
+      next: NextFunction,
+    ) => Promise<void>)
 
 export const asyncWrapper = (
   cb: AsyncRequestHandler,
 ): RequestHandler | ErrorRequestHandler => {
   if (cb.length === 4) {
+    const errHandler = cb as (
+      err: Error,
+      req: Request,
+      res: Response,
+      next: NextFunction,
+    ) => Promise<void>
     return async (
       err: Error,
       req: Request,
@@ -414,16 +422,21 @@ export const asyncWrapper = (
       next: NextFunction,
     ) => {
       try {
-        await cb(err, req, res, next)
+        await errHandler(err, req, res, next)
       } catch (e) {
         next(e)
       }
     }
   }
 
+  const reqHandler = cb as (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => Promise<void>
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      await cb(req, res, next)
+      await reqHandler(req, res, next)
     } catch (e) {
       next(e)
     }
