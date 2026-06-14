@@ -18,15 +18,70 @@ export interface AppObject {
   components?: Components
 }
 
-interface Components {
-  securitySchemas: SecuritySchemesObject
+/**
+ * OpenAPI 3.0 Security Scheme Object.
+ * @see https://spec.openapis.org/oas/v3.0.3#security-scheme-object
+ */
+export type SecuritySchemeType = 'apiKey' | 'http' | 'oauth2' | 'openIdConnect'
+
+/**
+ * OpenAPI 3.0 OAuth Flows Object.
+ * @see https://spec.openapis.org/oas/v3.0.3#oauth-flows-object
+ */
+export interface OAuthFlowsObject {
+  implicit?: {
+    authorizationUrl: string
+    refreshUrl?: string
+    scopes: Record<string, string>
+  }
+  password?: {
+    tokenUrl: string
+    refreshUrl?: string
+    scopes: Record<string, string>
+  }
+  clientCredentials?: {
+    tokenUrl: string
+    refreshUrl?: string
+    scopes: Record<string, string>
+  }
+  authorizationCode?: {
+    authorizationUrl: string
+    tokenUrl: string
+    refreshUrl?: string
+    scopes: Record<string, string>
+  }
 }
 
-interface SecuritySchemesObject {
-  [y: string]: {
-    type: string
-    [z: string]: unknown
-  }
+/**
+ * OpenAPI 3.0 Security Scheme Object. Required fields depend on `type`
+ * (e.g. `name`/`in` for apiKey, `scheme` for http, `flows` for oauth2).
+ * @see https://spec.openapis.org/oas/v3.0.3#security-scheme-object
+ */
+export interface SecuritySchemeObject {
+  type: SecuritySchemeType
+  description?: string
+  /** Required when type === 'apiKey'. */
+  name?: string
+  /** Required when type === 'apiKey'. */
+  in?: 'query' | 'header' | 'cookie'
+  /** Required when type === 'http'. */
+  scheme?: string
+  /** Used together with http scheme 'bearer'. */
+  bearerFormat?: string
+  /** Required when type === 'oauth2'. */
+  flows?: OAuthFlowsObject
+  /** Required when type === 'openIdConnect'. */
+  openIdConnectUrl?: string
+}
+
+/**
+ * OpenAPI 3.0 `components.securitySchemes` map, keyed by scheme name.
+ * Per-operation `security` references must resolve to a key here.
+ */
+export type SecuritySchemesObject = Record<string, SecuritySchemeObject>
+
+interface Components {
+  securitySchemes: SecuritySchemesObject
 }
 
 export interface PathItem {

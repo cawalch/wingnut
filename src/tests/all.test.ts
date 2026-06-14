@@ -22,6 +22,7 @@ import {
   Security,
   scope,
   scopeWrapper,
+  securitySchemes,
   validateBuilder,
   validateParams,
 } from '../lib/index'
@@ -741,15 +742,15 @@ describe('Security Schema', () => {
   it('should scope request to a user level', () => {
     const auth: Security = {
       name: 'auth',
-      handler: (_req: Request, res: Response) => {
-        res.status(400).send('Not Auth')
+      forbidden: (_req: Request, res: Response) => {
+        res.status(403).send('Forbidden')
       },
       scopes: {
         admin: UserLevel(100),
       },
       responses: {
-        '400': {
-          description: 'Not Auth',
+        '403': {
+          description: 'Forbidden',
         },
       },
     }
@@ -774,8 +775,8 @@ describe('Security Schema', () => {
       '200': {
         description: 'Success',
       },
-      '400': {
-        description: 'Not Auth',
+      '403': {
+        description: 'Forbidden',
       },
     })
   })
@@ -783,15 +784,15 @@ describe('Security Schema', () => {
   it('should apply security to all methods in a multi-method PathObject', () => {
     const auth: Security = {
       name: 'auth',
-      handler: (_req: Request, res: Response) => {
-        res.status(400).send('Not Auth')
+      forbidden: (_req: Request, res: Response) => {
+        res.status(403).send('Forbidden')
       },
       scopes: {
         admin: UserLevel(100),
       },
       responses: {
-        '400': {
-          description: 'Not Auth',
+        '403': {
+          description: 'Forbidden',
         },
       },
     }
@@ -946,15 +947,15 @@ describe('Security Schema', () => {
         calledBefore = true
         next()
       },
-      handler: (_req: Request, res: Response) => {
-        res.status(400).send('Not Auth')
+      forbidden: (_req: Request, res: Response) => {
+        res.status(403).send('Forbidden')
       },
       scopes: {
         admin: UserLevel(100),
       },
       responses: {
-        '400': {
-          description: 'Not Auth',
+        '403': {
+          description: 'Forbidden',
         },
       },
     }
@@ -1000,15 +1001,15 @@ describe('Security Schema', () => {
   it('should throw error when scope does not exist', () => {
     const security: Security = {
       name: 'auth',
-      handler: (_req: Request, res: Response) => {
-        res.status(400).send('Not Auth')
+      forbidden: (_req: Request, res: Response) => {
+        res.status(403).send('Forbidden')
       },
       scopes: {
         admin: () => true,
       },
       responses: {
-        '400': {
-          description: 'Not Auth',
+        '403': {
+          description: 'Forbidden',
         },
       },
     }
@@ -1031,16 +1032,16 @@ describe('Security Schema', () => {
       })
     const security: Security = {
       name: 'auth',
-      handler: (_req: Request, res: Response) => {
-        res.status(400).send('Not Auth')
+      forbidden: (_req: Request, res: Response) => {
+        res.status(403).send('Forbidden')
       },
       scopes: {
         admin: () => true,
         moderator: () => true,
       },
       responses: {
-        '400': {
-          description: 'Not Auth',
+        '403': {
+          description: 'Forbidden',
         },
       },
     }
@@ -1055,6 +1056,102 @@ describe('Security Schema', () => {
     expect(consoleSpyError).not.toHaveBeenCalled()
 
     consoleSpyError.mockRestore()
+  })
+})
+
+describe('securitySchemes', () => {
+  it('emits components.securitySchemes keyed by Security.name', () => {
+    const bearer: Security = {
+      name: 'bearerAuth',
+      scheme: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      forbidden: (_req: Request, res: Response) => {
+        res.status(403).send('Forbidden')
+      },
+      scopes: { admin: () => true },
+    }
+    const key: Security = {
+      name: 'apiKey',
+      scheme: { type: 'apiKey', in: 'header', name: 'X-API-Key' },
+      forbidden: (_req: Request, res: Response) => {
+        res.status(403).send('Forbidden')
+      },
+      scopes: { admin: () => true },
+    }
+    expect(securitySchemes(bearer, key)).toStrictEqual({
+      bearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+      },
+      apiKey: { type: 'apiKey', in: 'header', name: 'X-API-Key' },
+    })
+  })
+
+  it('skips Security definitions without a scheme', () => {
+    const docless: Security = {
+      name: 'docless',
+      forbidden: (_req: Request, res: Response) => {
+        res.status(403).send('Forbidden')
+      },
+      scopes: { admin: () => true },
+    }
+    expect(securitySchemes(docless)).toStrictEqual({})
+  })
+
+  it('resolves per-operation security refs against the emitted map', () => {
+    // The auth name on a Security must be a key in components.securitySchemes
+    // so Swagger UI / Redoc / Schemathesis can render the requirement.
+    const auth: Security = {
+      name: 'bearerAuth',
+      scheme: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      forbidden: (_req: Request, res: Response) => {
+        res.status(403).send('Forbidden')
+      },
+      scopes: { admin: () => true },
+      responses: { '403': { description: 'Forbidden' } },
+    }
+    const secured = authPathOp(scope(auth, 'admin'))(
+      getMethod({ middleware: [] }),
+    )
+    const schemes = securitySchemes(auth)
+    const refs = secured.get?.security ?? []
+    for (const ref of refs) {
+      for (const name of Object.keys(ref)) {
+        expect(schemes).toHaveProperty(name)
+      }
+    }
+  })
+})
+
+describe('401/403 modeling', () => {
+  it('scope() propagates both 401 and 403 responses', () => {
+    const auth: Security = {
+      name: 'bearerAuth',
+      scheme: { type: 'http', scheme: 'bearer' },
+      unauthorized: (_req: Request, res: Response) => {
+        res.status(401).send('Unauthenticated')
+      },
+      forbidden: (_req: Request, res: Response) => {
+        res.status(403).send('Forbidden')
+      },
+      scopes: { admin: () => false },
+      responses: {
+        '401': { description: 'Unauthenticated' },
+        '403': { description: 'Forbidden' },
+      },
+    }
+    const secured = authPathOp(scope(auth, 'admin'))(
+      getMethod({
+        middleware: [],
+        responses: { '200': { description: 'OK' } },
+      }),
+    )
+    expect(secured.get?.responses).toStrictEqual({
+      '200': { description: 'OK' },
+      '401': { description: 'Unauthenticated' },
+      '403': { description: 'Forbidden' },
+    })
+    expect(secured.get?.security).toStrictEqual([{ bearerAuth: ['admin'] }])
   })
 })
 
