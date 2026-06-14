@@ -18,19 +18,19 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.2.5",
-    "@types/express": "^5.0.3",
-    "@types/node": "^24.6.2",
-    "@types/supertest": "^6.0.3",
-    "@vitest/coverage-istanbul": "^4.0.16",
-    "@vitest/coverage-v8": "^4.0.16",
-    "@vitest/ui": "^4.0.16",
+    "@biomejs/biome": "2.5.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.9.3",
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-istanbul": "^4.1.8",
+    "@vitest/coverage-v8": "^4.1.8",
+    "@vitest/ui": "^4.1.8",
     "ajv-formats": "^3.0.1",
     "esbuild": "^0.28.1",
     "express": "^5.2.1",
-    "supertest": "^7.1.4",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.16"
+    "supertest": "^7.2.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
   },
   "peerDependencies": {
     "ajv": "^8.12.0",
@@ -56,7 +56,7 @@
     "typescript",
     "express.js"
   ],
-  "packageManager": "pnpm@9.7.1",
+  "packageManager": "pnpm@11.6.0",
   "homepage": "https://github.com/cawalch/wingnut#readme",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"

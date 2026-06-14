@@ -1,0 +1,4 @@
+# pnpm settings (pnpm 11 reads settings here, not the package.json "pnpm" field)
+# https://pnpm.io/settings
+allowBuilds:
+  esbuild: true
