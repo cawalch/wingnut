@@ -137,7 +137,7 @@ describe('validateParams', () => {
     })
   })
 
-  it('should not share param schema references (BUG-6)', () => {
+  it('should not share param schema references', () => {
     const sharedSchema = { type: 'integer' as const, minimum: 1 }
     const params: (Partial<Parameter> & { name: string })[] = [
       { in: 'query', name: 'limit', schema: sharedSchema },
@@ -153,7 +153,7 @@ describe('validateParams', () => {
 })
 
 describe('param', () => {
-  it('should not let `in` be overridden at runtime (BUG-7)', () => {
+  it('should not let `in` be overridden at runtime', () => {
     const result = queryParam({
       name: 'limit',
       in: 'body',
@@ -683,7 +683,7 @@ describe('integration tests', () => {
     expect(widgetCalled).toBe(1)
   })
 
-  it('should merge methods under the same path across controllers (BUG-5)', () => {
+  it('should merge methods under the same path across controllers', () => {
     const app = express()
     const { route, paths, controller } = wingnut(ajv)
     const ctrl1 = controller({
