@@ -8,12 +8,15 @@
     "test": "vitest",
     "test:no-watch": "vitest --run",
     "coverage": "vitest run --coverage",
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node18 --minify --tree-shaking=true --external:express --external:ajv --outdir=dist && tsc --project tsconfig.build.json",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --minify --tree-shaking=true --external:express --external:ajv --outdir=dist && tsc --project tsconfig.build.json",
     "lint": "biome check --diagnostic-level=error",
     "lint:fix": "biome check --fix"
   },
   "author": "cawalch@pm.me",
   "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
   "devDependencies": {
     "@biomejs/biome": "2.2.5",
     "@types/express": "^5.0.3",
