@@ -1158,6 +1158,38 @@ describe('401/403 modeling', () => {
   })
 })
 
+/** Build an Express app secured by `auth` at GET /api/me; shared setup. */
+const buildSecuredApp = (
+  auth: Security,
+  scopeName: string,
+  pre?: RequestHandler,
+) => {
+  const { route, paths, controller } = wingnut(ajv)
+  const app = express()
+  if (pre) app.use(pre)
+  paths(
+    app,
+    controller({
+      prefix: '/api',
+      route: (r: Router) =>
+        route(
+          r,
+          path(
+            '/me',
+            authPathOp(scope(auth, scopeName))(
+              getMethod({
+                middleware: [
+                  (_req: Request, res: Response) => res.status(200).send('ok'),
+                ],
+              }),
+            ),
+          ),
+        ),
+    }),
+  )
+  return app
+}
+
 describe('bearerAuth', () => {
   it('emits an http/bearer securityScheme', () => {
     const auth = bearerAuth({
@@ -1387,6 +1419,32 @@ describe('bearerAuth', () => {
       scheme: 'bearer',
     })
   })
+
+  it('extracts the token after many spaces (ReDoS-resistant separator)', async () => {
+    const auth = bearerAuth({
+      name: 'bearerAuth',
+      verify: (token) => token === 'valid',
+      scopes: { ok: () => true },
+    })
+    // A greedy \s+ separator + many spaces must stay linear and resolve the
+    // token; on the old (\s+)(.+) regex this shape risked polynomial backtracking.
+    const res = await request(buildSecuredApp(auth, 'ok'))
+      .get('/api/me')
+      .set('Authorization', `Bearer ${' '.repeat(50)}valid`)
+    expect(res.status).toBe(200)
+  })
+
+  it('returns 401 when a bearer header is spaces only (no token)', async () => {
+    const auth = bearerAuth({
+      name: 'bearerAuth',
+      verify: () => true,
+      scopes: { ok: () => true },
+    })
+    const res = await request(buildSecuredApp(auth, 'ok'))
+      .get('/api/me')
+      .set('Authorization', `Bearer ${' '.repeat(50)}`)
+    expect(res.status).toBe(401)
+  })
 })
 
 describe('apiKey', () => {
@@ -1476,6 +1534,83 @@ describe('apiKey', () => {
     )
     const res = await request(app).get('/api/me?key=secret')
     expect(res.status).toBe(200)
+  })
+
+  it('extracts the first value when a query param is repeated', async () => {
+    const auth = apiKey({
+      name: 'apiKey',
+      in: 'query',
+      fieldName: 'key',
+      verify: (value) => value === 'secret',
+      scopes: { ok: () => true },
+    })
+    // ?key=secret&key=other → Express parses req.query.key as an array
+    const res = await request(buildSecuredApp(auth, 'ok')).get(
+      '/api/me?key=secret&key=other',
+    )
+    expect(res.status).toBe(200)
+  })
+
+  it('returns 401 when the api-key header is missing', async () => {
+    const auth = apiKey({
+      name: 'apiKey',
+      in: 'header',
+      fieldName: 'X-API-Key',
+      verify: () => true,
+      scopes: { ok: () => true },
+    })
+    const res = await request(buildSecuredApp(auth, 'ok')).get('/api/me')
+    expect(res.status).toBe(401)
+  })
+
+  it('returns 401 when a query api-key is absent', async () => {
+    const auth = apiKey({
+      name: 'apiKey',
+      in: 'query',
+      fieldName: 'key',
+      verify: () => true,
+      scopes: { ok: () => true },
+    })
+    const res = await request(buildSecuredApp(auth, 'ok')).get('/api/me')
+    expect(res.status).toBe(401)
+  })
+
+  it('extracts the first value when a header value is an array', async () => {
+    const auth = apiKey({
+      name: 'apiKey',
+      in: 'header',
+      fieldName: 'X-API-Key',
+      verify: (value) => value === 'secret',
+      scopes: { ok: () => true },
+    })
+    // Custom headers arrive as a string in real HTTP traffic, but the Express
+    // type is string | string[]. Inject an array via pre-middleware to cover
+    // the defensive array branch.
+    const injectArrayHeader: RequestHandler = (req, _res, next) => {
+      ;(req.headers as Record<string, unknown>)['x-api-key'] = [
+        'secret',
+        'extra',
+      ]
+      next()
+    }
+    const res = await request(
+      buildSecuredApp(auth, 'ok', injectArrayHeader),
+    ).get('/api/me')
+    expect(res.status).toBe(200)
+  })
+
+  it('reads the key from a cookie when in: cookie', async () => {
+    const auth = apiKey({
+      name: 'apiKey',
+      in: 'cookie',
+      fieldName: 'session',
+      verify: (value) => value === 'secret',
+      scopes: { ok: () => true },
+    })
+    // Without cookie-parser, req.cookies is undefined → 401. This covers the
+    // cookie extraction branch; the caller wires cookie-parser themselves.
+    const res = await request(buildSecuredApp(auth, 'ok')).get('/api/me')
+    expect(res.status).toBe(401)
   })
 })
 

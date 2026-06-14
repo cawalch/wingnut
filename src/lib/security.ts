@@ -29,7 +29,10 @@ export type Verify = (
   req: Request,
 ) => boolean | Promise<boolean>
 
-const BEARER_PATTERN = /^Bearer\s+(.+)$/i
+// Token capture starts with \S (non-whitespace) so the \s+ separator and
+// the token cannot overlap — keeps matching linear and avoids the ReDoS
+// (polynomial backtracking) flagged by CodeQL on user-controlled headers.
+const BEARER_PATTERN = /^Bearer\s+(\S.*)$/i
 
 const extractBearerToken = (req: Request): string | undefined => {
   const match = BEARER_PATTERN.exec(req.headers.authorization ?? '')
