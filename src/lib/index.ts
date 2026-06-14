@@ -629,57 +629,9 @@ export const asyncPutMethod = asyncMethod('put', asyncWrapper)
 
 export const asyncDeleteMethod = asyncMethod('delete', asyncWrapper)
 
-type WnNumberType = 'integer' | 'int32' | 'int8' | 'number'
-
-type WnTDataDef<S, D extends Record<string, unknown>> = S extends {
-  type: WnNumberType
-}
-  ? number
-  : S extends { type: 'boolean' }
-    ? boolean
-    : S extends { type: 'timestamp' }
-      ? string | Date
-      : S extends { type: 'array'; items: { type: string } }
-        ? WnTDataDef<S['items'], D>[]
-        : S extends { type: 'string'; enum: readonly (infer E)[] }
-          ? E
-          : S extends { elements: infer E }
-            ? WnTDataDef<E, D>[]
-            : S extends { type: 'string' }
-              ? string
-              : S extends {
-                    properties: Record<string, unknown>
-                    required?: readonly string[]
-                    additionalProperties?: boolean
-                  }
-                ? {
-                    -readonly [K in keyof S['properties']]?: WnTDataDef<
-                      S['properties'][K],
-                      D
-                    >
-                  } & {
-                    -readonly [K in S['required'] extends readonly (keyof S['properties'])[]
-                      ? S['required'][number]
-                      : never]: WnTDataDef<S['properties'][K], D>
-                  } & ([S['additionalProperties']] extends [true]
-                      ? Record<string, unknown>
-                      : unknown)
-                : S extends { name: string; schema: Record<string, unknown> }
-                  ? {
-                      -readonly [K in S['name']]: WnTDataDef<S['schema'], D>
-                    }
-                  : S extends {
-                        description: string
-                        schema: Record<string, unknown>
-                      }
-                    ? WnDataType<S['schema']>
-                    : S extends { type: 'object' }
-                      ? Record<string, unknown>
-                      : unknown
-
-export type WnDataType<S> = WnTDataDef<S, Record<string, never>>
-
-export type WnParamDef = Record<
-  string,
-  Record<string, Omit<Parameter, 'in' | 'name'>>
->
+export type {
+  WnDataType,
+  WnNumberType,
+  WnParamDef,
+  WnTypeOf,
+} from '../types/wn-data'

@@ -211,7 +211,7 @@ const auth: Security = {
   },
   scopes: {
     // define OpenAPI security scopes based on user levels
-    // these can be referenced with wingunut's Scope
+    // these can be referenced with wingnut's Scope
     admin: userLevelAuth(100),
     user: userLevelAuth(10),
   },
@@ -265,6 +265,10 @@ const editUserAPI = adminAuth(
 
 ## Type-Safe Request Values
 
+`WnDataType<S>` resolves a Wingnut / OpenAPI-3 schema to the TypeScript type a
+handler sees in `req.body`, `req.query`, or `req.params`. Pair it with
+`WnParamDef` and `satisfies` so the literal schema is preserved for inference.
+
 ```typescript
 import { WnParamDef, WnDataType } from "wingnut";
 
@@ -276,7 +280,6 @@ const ListQueryParams = {
         type: "integer",
         minimum: 1,
         maximum: 100,
-        format: "number",
         default: 10,
       },
     },
@@ -297,16 +300,61 @@ type ListRequest = Request<
   WnDataType<typeof ListQueryParams>
 >;
 
-// Request Handler
-const listLogsHandler = (
-  req: ListRequest,
-  res: Response,
-  next: NextFunction,
-) => {
-  // limit and filter are correctly typed
+// limit: number | undefined, filter: string | null | undefined
+const listLogsHandler = (req: ListRequest, res: Response, next: NextFunction) => {
   const { limit, filter } = req.query;
   // ...
 };
+```
+
+`nullable: true` (OpenAPI 3.0) and `type` arrays including `"null"`
+(JSON Schema / OpenAPI 3.1) both resolve to `T | null`:
+
+```typescript
+type A = WnDataType<{ type: "string"; nullable: true }>; // string | null
+type B = WnDataType<{ type: readonly ["string", "null"] }>; // string | null
+```
+
+`const` and `enum` resolve to their literal union (use `as const` on the
+array):
+
+```typescript
+type Role = WnDataType<{ type: "string"; enum: readonly ["admin", "user"] }>; // "admin" | "user"
+type Status = WnDataType<{ const: "pending" }>; // "pending"
+```
+
+Composition keywords resolve as unions or intersections:
+
+```typescript
+type Id = WnDataType<{
+  anyOf: readonly [{ type: "string" }, { type: "integer" }];
+}>; // string | number
+
+type Audit = WnDataType<{
+  allOf: readonly [
+    { properties: { by: { type: "string" } } },
+    { properties: { at: { type: "integer" } }; required: readonly ["at"] },
+  ];
+}>; // { by?: string } & { at: number }
+```
+
+Object schemas with `required`, optional properties, and `additionalProperties`
+combine into a single inferred type:
+
+```typescript
+type Body = WnDataType<{
+  type: "object";
+  properties: {
+    name: { type: "string" };
+    role: { type: "string"; enum: readonly ["admin", "user"] };
+    meta: { type: "object" };
+  };
+  required: readonly ["name", "role"];
+  additionalProperties: true;
+}>;
+// { name?: string; role?: "admin" | "user"; meta?: Record<string, unknown> }
+//   & { name: string; role: "admin" | "user" }
+//   & { [key: string]: unknown }
 ```
 
 ### Swagger Documentation
@@ -314,7 +362,7 @@ const listLogsHandler = (
 ```typescript
 import express from 'express';
 import Ajv from 'ajv';
-import { PathItem, wingnut } from 'wingunut';
+import { PathItem, wingnut } from 'wingnut';
 import swaggerUI from 'swagger-ui-express';
 
 const ajv = new Ajv();
@@ -328,7 +376,7 @@ const swaggerPath = (paths: PathItem) => ({
     title: 'My App Swagger Doc',
     description: 'My App Swagger Doc',
   },
-  paths;
+  paths,
 })
 
 const { route, paths, controller } = wingnut(ajv)
