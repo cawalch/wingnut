@@ -20,7 +20,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.2.5",
     "@types/express": "^5.0.3",
-    "@types/node": "^24.6.2",
+    "@types/node": "^25.9.3",
     "@types/supertest": "^6.0.3",
     "@vitest/coverage-istanbul": "^4.0.16",
     "@vitest/coverage-v8": "^4.0.16",
