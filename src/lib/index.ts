@@ -69,9 +69,9 @@ export const validateParams = (
       continue
     }
 
-    // Direct assignment - param.schema is not mutated after this point
-    // This avoids unnecessary object spread allocation
-    schema.properties[param.name] = param.schema
+    // Copy the param schema so AJV cannot mutate a shared Parameter object
+    // across routes during compilation.
+    schema.properties[param.name] = { ...param.schema }
 
     if (param.required) {
       required.add(param.name)
@@ -354,7 +354,7 @@ export const wingnut = (ajv: AjvLike) => {
     router: Router,
     ...ctrls: ReturnType<typeof controller>[]
   ): PathItem => {
-    const acc = { out: {}, track: new Set<string>() }
+    const acc = { out: {} as PathItem, track: new Set<string>() }
 
     ctrls.forEach((c) => {
       const p = c(router)
@@ -368,7 +368,9 @@ export const wingnut = (ajv: AjvLike) => {
           }
           acc.track.add(full)
         }
-        Object.assign(acc.out, item)
+        // Merge methods under the same path key; the duplicate check above
+        // guarantees the method sets are disjoint, so none are overwritten.
+        acc.out[path] = Object.assign(acc.out[path] ?? {}, item[path])
       })
     })
 
@@ -572,8 +574,8 @@ export const authPathOp =
 export const param =
   (pin: ParamIn) =>
   (param: Omit<Parameter, 'in'>): Parameter => ({
-    in: pin,
     ...param,
+    in: pin,
   })
 
 export const integer = (sch: Partial<ParamSchema>): ParamSchema => ({

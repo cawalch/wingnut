@@ -25,7 +25,7 @@
 
 ### BUG-4: Schema cache key collision via `$id` — wrong validator returned
 - **File:** `src/lib/index.ts:141-148`
-- **Status:** 🔧 In Progress
+- **Status:** ✅ Fixed (merged via #62)
 - **Branch:** `bugfix/BUG-4-schema-cache-id-collision`
 - Two structurally different schemas with the same `$id` produce the same cache key, returning the wrong compiled validator.
 - **Impact:** Incorrect request validation — bad data passes, valid data rejected.
@@ -34,18 +34,18 @@
 
 ### BUG-5: `Object.assign` in `paths()` silently overwrites routes
 - **File:** `src/lib/index.ts:375`
-- **Status:** 📋 Pending
+- **Status:** ✅ Fixed (merged via #80)
 - If two controllers produce PathItems with overlapping path keys, `Object.assign(acc.out, item)` silently overwrites.
 - **Impact:** Lost route definitions.
 
 ### BUG-6: `validateParams` shares param schema objects by reference
 - **File:** `src/lib/index.ts:74`
-- **Status:** 📋 Pending
+- **Status:** ✅ Fixed (merged via #80)
 - `schema.properties[param.name] = param.schema` is a direct reference. AJV may mutate schemas during compilation, contaminating shared Parameter objects across routes.
 - **Impact:** Cross-route schema contamination.
 
 ### BUG-7: `param()` spread allows `in` to be overridden at runtime
 - **File:** `src/lib/index.ts:558-563`
-- **Status:** 📋 Pending
+- **Status:** ✅ Fixed (merged via #80)
 - `Omit<Parameter, 'in'>` only protects at compile time. At runtime, an object with `in` property would override the intended param location.
 - **Impact:** Wrong validation target (e.g., body instead of query).

@@ -136,6 +136,31 @@ describe('validateParams', () => {
       required: [],
     })
   })
+
+  it('should not share param schema references (BUG-6)', () => {
+    const sharedSchema = { type: 'integer' as const, minimum: 1 }
+    const params: (Partial<Parameter> & { name: string })[] = [
+      { in: 'query', name: 'limit', schema: sharedSchema },
+      { in: 'query', name: 'offset', schema: sharedSchema },
+    ]
+    const result = validateParams(params)
+    // AJV may mutate compiled schemas; the built schema must not reference
+    // the input object, or a shared Parameter contaminates other routes.
+    expect(result.properties?.limit).not.toBe(sharedSchema)
+    expect(result.properties?.offset).not.toBe(sharedSchema)
+    expect(result.properties?.limit).toEqual(sharedSchema)
+  })
+})
+
+describe('param', () => {
+  it('should not let `in` be overridden at runtime (BUG-7)', () => {
+    const result = queryParam({
+      name: 'limit',
+      in: 'body',
+      schema: { type: 'integer' as const },
+    } as unknown as Omit<Parameter, 'in'>)
+    expect(result.in).toBe('query')
+  })
 })
 
 describe('validateBuilder', () => {
@@ -656,6 +681,45 @@ describe('integration tests', () => {
     await request(app).get('/widgets').expect(200)
     expect(usersCalled).toBe(1)
     expect(widgetCalled).toBe(1)
+  })
+
+  it('should merge methods under the same path across controllers (BUG-5)', () => {
+    const app = express()
+    const { route, paths, controller } = wingnut(ajv)
+    const ctrl1 = controller({
+      prefix: '/api',
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            '/users',
+            getMethod({
+              middleware: [
+                (_req: Request, res: Response) => res.status(200).send('get'),
+              ],
+            }),
+          ),
+        ),
+    })
+    const ctrl2 = controller({
+      prefix: '/api',
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            '/users',
+            postMethod({
+              middleware: [
+                (_req: Request, res: Response) => res.status(200).send('post'),
+              ],
+            }),
+          ),
+        ),
+    })
+    const doc = paths(app, ctrl1, ctrl2)
+    // both methods must survive in the aggregated PathItem
+    expect(doc['/api/users'].get).toBeDefined()
+    expect(doc['/api/users'].post).toBeDefined()
   })
 })
 
