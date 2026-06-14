@@ -11,12 +11,15 @@ import { assert, beforeEach, describe, expect, it, vi } from 'vitest'
 import { app, createSchemaCache, headerParam, path, wingnut } from '../lib'
 import { ValidationError, WingnutError } from '../lib/errors'
 import {
+  apiKey,
   asyncGetMethod,
   asyncPostMethod,
   asyncWrapper,
   authPathOp,
+  bearerAuth,
   getMethod,
   groupByParamIn,
+  oauth2,
   postMethod,
   queryParam,
   Security,
@@ -1152,6 +1155,428 @@ describe('401/403 modeling', () => {
       '403': { description: 'Forbidden' },
     })
     expect(secured.get?.security).toStrictEqual([{ bearerAuth: ['admin'] }])
+  })
+})
+
+describe('bearerAuth', () => {
+  it('emits an http/bearer securityScheme', () => {
+    const auth = bearerAuth({
+      name: 'bearerAuth',
+      description: 'JWT access token',
+      bearerFormat: 'JWT',
+      verify: () => true,
+    })
+    expect(auth.scheme).toStrictEqual({
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+      description: 'JWT access token',
+    })
+    expect(auth.name).toBe('bearerAuth')
+  })
+
+  it('omits bearerFormat when unset', () => {
+    const auth = bearerAuth({ name: 'bearerAuth', verify: () => true })
+    expect(auth.scheme).toStrictEqual({ type: 'http', scheme: 'bearer' })
+  })
+
+  it('wires extraction into before and fails closed on a missing credential', async () => {
+    const auth = bearerAuth({
+      name: 'bearerAuth',
+      verify: () => true,
+      scopes: { ok: () => true },
+    })
+    const { route, paths, controller } = wingnut(ajv)
+    const app = express()
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (r: Router) =>
+          route(
+            r,
+            path(
+              '/me',
+              authPathOp(scope(auth, 'ok'))(
+                getMethod({
+                  middleware: [
+                    (_req: Request, res: Response) =>
+                      res.status(200).send('ok'),
+                  ],
+                }),
+              ),
+            ),
+          ),
+      }),
+    )
+    const res = await request(app).get('/api/me')
+    expect(res.status).toBe(401)
+    expect(res.headers['www-authenticate']).toBe('Bearer')
+  })
+
+  it('returns 401 when verify returns false', async () => {
+    const auth = bearerAuth({
+      name: 'bearerAuth',
+      verify: () => false,
+      scopes: { ok: () => true },
+    })
+    const { route, paths, controller } = wingnut(ajv)
+    const app = express()
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (r: Router) =>
+          route(
+            r,
+            path(
+              '/me',
+              authPathOp(scope(auth, 'ok'))(
+                getMethod({
+                  middleware: [
+                    (_req: Request, res: Response) =>
+                      res.status(200).send('ok'),
+                  ],
+                }),
+              ),
+            ),
+          ),
+      }),
+    )
+    const res = await request(app)
+      .get('/api/me')
+      .set('Authorization', 'Bearer nope')
+    expect(res.status).toBe(401)
+  })
+
+  it('returns 401 when verify throws', async () => {
+    const auth = bearerAuth({
+      name: 'bearerAuth',
+      verify: () => {
+        throw new Error('bad token')
+      },
+      scopes: { ok: () => true },
+    })
+    const { route, paths, controller } = wingnut(ajv)
+    const app = express()
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (r: Router) =>
+          route(
+            r,
+            path(
+              '/me',
+              authPathOp(scope(auth, 'ok'))(
+                getMethod({
+                  middleware: [
+                    (_req: Request, res: Response) =>
+                      res.status(200).send('ok'),
+                  ],
+                }),
+              ),
+            ),
+          ),
+      }),
+    )
+    const res = await request(app)
+      .get('/api/me')
+      .set('Authorization', 'Bearer boom')
+    expect(res.status).toBe(401)
+  })
+
+  it('passes through when verify succeeds and the scope matches', async () => {
+    interface AuthedRequest extends Request {
+      user?: { role: string }
+    }
+    const auth = bearerAuth({
+      name: 'bearerAuth',
+      verify: (token, req) => {
+        if (token === 'valid') {
+          ;(req as AuthedRequest).user = { role: 'admin' }
+          return true
+        }
+        return false
+      },
+      scopes: {
+        admin: (req: Request) => (req as AuthedRequest).user?.role === 'admin',
+      },
+    })
+    const { route, paths, controller } = wingnut(ajv)
+    const app = express()
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (r: Router) =>
+          route(
+            r,
+            path(
+              '/me',
+              authPathOp(scope(auth, 'admin'))(
+                getMethod({
+                  middleware: [
+                    (_req: Request, res: Response) =>
+                      res.status(200).send('ok'),
+                  ],
+                }),
+              ),
+            ),
+          ),
+      }),
+    )
+    const res = await request(app)
+      .get('/api/me')
+      .set('Authorization', 'Bearer valid')
+    expect(res.status).toBe(200)
+    expect(res.text).toBe('ok')
+  })
+
+  it('returns 403 when authenticated but the scope fails', async () => {
+    interface AuthedRequest extends Request {
+      user?: { role: string }
+    }
+    const auth = bearerAuth({
+      name: 'bearerAuth',
+      verify: (token, req) => {
+        if (token === 'valid') {
+          ;(req as AuthedRequest).user = { role: 'user' }
+          return true
+        }
+        return false
+      },
+      scopes: {
+        admin: (req: Request) => (req as AuthedRequest).user?.role === 'admin',
+      },
+    })
+    const { route, paths, controller } = wingnut(ajv)
+    const app = express()
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (r: Router) =>
+          route(
+            r,
+            path(
+              '/me',
+              authPathOp(scope(auth, 'admin'))(
+                getMethod({
+                  middleware: [
+                    (_req: Request, res: Response) =>
+                      res.status(200).send('ok'),
+                  ],
+                }),
+              ),
+            ),
+          ),
+      }),
+    )
+    const res = await request(app)
+      .get('/api/me')
+      .set('Authorization', 'Bearer valid')
+    expect(res.status).toBe(403)
+  })
+
+  it('resolves scheme refs in components.securitySchemes', () => {
+    const auth = bearerAuth({ name: 'bearerAuth', verify: () => true })
+    const schemes = securitySchemes(auth)
+    expect(schemes.bearerAuth).toStrictEqual({
+      type: 'http',
+      scheme: 'bearer',
+    })
+  })
+})
+
+describe('apiKey', () => {
+  it('emits an apiKey securityScheme', () => {
+    const auth = apiKey({
+      name: 'apiKey',
+      in: 'header',
+      fieldName: 'X-API-Key',
+      description: 'server key',
+      verify: () => true,
+    })
+    expect(auth.scheme).toStrictEqual({
+      type: 'apiKey',
+      in: 'header',
+      name: 'X-API-Key',
+      description: 'server key',
+    })
+  })
+
+  it('extracts the key from a header and verifies', async () => {
+    const auth = apiKey({
+      name: 'apiKey',
+      in: 'header',
+      fieldName: 'X-API-Key',
+      verify: (value) => value === 'secret',
+      scopes: { ok: () => true },
+    })
+    const { route, paths, controller } = wingnut(ajv)
+    const app = express()
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (r: Router) =>
+          route(
+            r,
+            path(
+              '/me',
+              authPathOp(scope(auth, 'ok'))(
+                getMethod({
+                  middleware: [
+                    (_req: Request, res: Response) =>
+                      res.status(200).send('ok'),
+                  ],
+                }),
+              ),
+            ),
+          ),
+      }),
+    )
+    const ok = await request(app).get('/api/me').set('X-API-Key', 'secret')
+    expect(ok.status).toBe(200)
+    const bad = await request(app).get('/api/me').set('X-API-Key', 'wrong')
+    expect(bad.status).toBe(401)
+  })
+
+  it('extracts the key from a query parameter', async () => {
+    const auth = apiKey({
+      name: 'apiKey',
+      in: 'query',
+      fieldName: 'key',
+      verify: (value) => value === 'secret',
+      scopes: { ok: () => true },
+    })
+    const { route, paths, controller } = wingnut(ajv)
+    const app = express()
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (r: Router) =>
+          route(
+            r,
+            path(
+              '/me',
+              authPathOp(scope(auth, 'ok'))(
+                getMethod({
+                  middleware: [
+                    (_req: Request, res: Response) =>
+                      res.status(200).send('ok'),
+                  ],
+                }),
+              ),
+            ),
+          ),
+      }),
+    )
+    const res = await request(app).get('/api/me?key=secret')
+    expect(res.status).toBe(200)
+  })
+})
+
+describe('oauth2', () => {
+  it('emits an oauth2 securityScheme with flows', () => {
+    const flows = {
+      authorizationCode: {
+        authorizationUrl: 'https://example.com/oauth/authorize',
+        tokenUrl: 'https://example.com/oauth/token',
+        scopes: { read: 'read access', write: 'write access' },
+      },
+    }
+    const auth = oauth2({
+      name: 'oauth2',
+      description: 'OAuth 2.0',
+      flows,
+      verify: () => true,
+    })
+    expect(auth.scheme).toStrictEqual({
+      type: 'oauth2',
+      flows,
+      description: 'OAuth 2.0',
+    })
+  })
+
+  it('extracts a bearer token and fails closed when missing', async () => {
+    const auth = oauth2({
+      name: 'oauth2',
+      flows: {
+        clientCredentials: {
+          tokenUrl: 'https://example.com/oauth/token',
+          scopes: { read: 'read' },
+        },
+      },
+      verify: () => true,
+      scopes: { ok: () => true },
+    })
+    const { route, paths, controller } = wingnut(ajv)
+    const app = express()
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (r: Router) =>
+          route(
+            r,
+            path(
+              '/me',
+              authPathOp(scope(auth, 'ok'))(
+                getMethod({
+                  middleware: [
+                    (_req: Request, res: Response) =>
+                      res.status(200).send('ok'),
+                  ],
+                }),
+              ),
+            ),
+          ),
+      }),
+    )
+    const res = await request(app).get('/api/me')
+    expect(res.status).toBe(401)
+  })
+})
+
+describe('scheme builders + securitySchemes', () => {
+  it('emits all three scheme types into one components map', () => {
+    const bearer = bearerAuth({
+      name: 'bearerAuth',
+      bearerFormat: 'JWT',
+      verify: () => true,
+    })
+    const key = apiKey({
+      name: 'apiKey',
+      in: 'header',
+      fieldName: 'X-API-Key',
+      verify: () => true,
+    })
+    const oauth = oauth2({
+      name: 'oauth2',
+      flows: {
+        implicit: {
+          authorizationUrl: 'https://example.com/authorize',
+          scopes: { read: 'read' },
+        },
+      },
+      verify: () => true,
+    })
+    expect(securitySchemes(bearer, key, oauth)).toStrictEqual({
+      bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      apiKey: { type: 'apiKey', in: 'header', name: 'X-API-Key' },
+      oauth2: {
+        type: 'oauth2',
+        flows: {
+          implicit: {
+            authorizationUrl: 'https://example.com/authorize',
+            scopes: { read: 'read' },
+          },
+        },
+      },
+    })
   })
 })
 

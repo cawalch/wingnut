@@ -179,16 +179,19 @@ const apiKeyHandler = getMethod({
 });
 ```
 
-## Secure Routes with Scopes
+## Secure Routes with Scheme Builders
+
+Authentication scheme builders compose extraction, verification, and the
+OpenAPI securityScheme from one config — bring-your-own crypto. A failed
+`verify` returns **401**; a failed scope returns **403**.
 
 ```typescript
 import { Request, Response } from "express";
 import {
-  scope,
-  Security,
+  bearerAuth,
   authPathOp,
+  scope,
   securitySchemes,
-  ScopeHandler,
   putMethod,
   ParamSchema,
 } from "wingnut";
@@ -197,89 +200,106 @@ interface UserAuth extends Request {
   user?: { level: number };
 }
 
-// Build a scope handler to evaluate the user context (session)
-const userLevelAuth =
-  (minLevel: number): ScopeHandler =>
-  (req: UserAuth): boolean =>
-    (req.user?.level ?? 0) >= minLevel;
-
-// A Security definition: enforcement middleware + OpenAPI docs in one place,
-// so the guards and the documentation cannot drift.
-const auth: Security = {
+// A Security: extraction in `before`, verification via `verify`, the correct
+// securityScheme on `scheme`, and a 401 slot — all from one config.
+const auth = bearerAuth({
   // name is the securityScheme key each operation references
   name: "bearerAuth",
-  // OpenAPI securityScheme, emitted into components.securitySchemes
-  scheme: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
-  // optional 401 handler — invoked when authentication fails
-  // (missing/invalid token). Verify the token in a `before` hook.
-  unauthorized: (_req: Request, res: Response) => {
-    res.status(401).send("Unauthenticated");
+  description: "JWT access token",
+  bearerFormat: "JWT",
+  // caller-supplied verification — false or a throw → 401
+  verify: (token, req) => {
+    try {
+      (req as UserAuth).user = verifyJwt(token); // your JWT lib
+      return true;
+    } catch {
+      return false;
+    }
   },
-  // 403 handler — invoked when authenticated but the scope check fails
-  forbidden: (_req: Request, res: Response) => {
-    res.status(403).send("Forbidden");
-  },
+  // authorization half — scope handlers evaluated with OR semantics
   scopes: {
-    // OpenAPI security scopes, evaluated with OR semantics
-    admin: userLevelAuth(100),
-    user: userLevelAuth(10),
+    admin: (req) => ((req as UserAuth).user?.level ?? 0) >= 100,
   },
-  // response schemas surfaced on each secured operation
-  responses: {
-    "401": { description: "Unauthenticated" },
-    "403": { description: "Forbidden" },
-  },
-};
+});
 
-// reusable scope handler to secure admin-only routes
+// authorization layer — authenticated but missing the scope → 403
 const adminAuth = authPathOp(scope(auth, "admin"));
 
-// possible user update schema
 const updateUserSchema: ParamSchema = {
   type: "object",
   properties: {
     user: {
       type: "object",
-      properties: {
-        level: {
-          type: "integer",
-          minimum: 0,
-        },
-      },
+      properties: { level: { type: "integer", minimum: 0 } },
       required: ["level"],
     },
   },
   required: ["user"],
 };
 
-// perform authorization using AdminAuth before updating
+// enforcement middleware is attached automatically; security docs too
 const editUserAPI = adminAuth(
   putMethod({
     description: "Edit a user",
     requestBody: {
       description: "user attributes to edit",
-      content: {
-        "application/json": {
-          schema: updateUserSchema,
-        },
-      },
+      content: { "application/json": { schema: updateUserSchema } },
     },
     middleware: [
-      // express.js RequestHandler — admin-scoped automatically
+      /* express.js RequestHandler */
     ],
   }),
 );
 
 // Emit components.securitySchemes so per-operation security references
-// resolve in Swagger UI / Redoc / Schemathesis. Securities without a
-// scheme are skipped.
+// resolve in Swagger UI / Redoc / Schemathesis.
 const schemes = securitySchemes(auth);
-// → { bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" } }
+// → { bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT", description: "JWT access token" } }
 ```
 
-Wingnut ships **no** JWT/OAuth/session library — bring your own crypto. Verify
-the token in a `before` hook and populate `req.user`; wingnut only composes
-the middleware and documents the scheme.
+### apiKey & oauth2
+
+```typescript
+import { apiKey, oauth2 } from "wingnut";
+
+// API key in a header (also: in: "query" | "cookie"; cookie needs cookie-parser)
+const key = apiKey({
+  name: "apiKey",
+  in: "header",
+  fieldName: "X-API-Key",
+  verify: (value, req) => {
+    (req as UserAuth).user = lookupKey(value);
+    return !!req.user;
+  },
+});
+
+// OAuth 2.0 — bearer extraction + flow documentation
+const oauth = oauth2({
+  name: "oauth2",
+  flows: {
+    authorizationCode: {
+      authorizationUrl: "https://example.com/oauth/authorize",
+      tokenUrl: "https://example.com/oauth/token",
+      scopes: { read: "read access", write: "write access" },
+    },
+  },
+  verify: (token, req) => {
+    (req as UserAuth).user = verifyAccessToken(token);
+    return !!req.user;
+  },
+});
+```
+
+Wingnut ships **no** JWT/OAuth/session library — bring your own crypto. The
+scheme builders compose the middleware and document the scheme; you supply
+`verify` and populate `req.user`.
+
+### Low-level `Security`
+
+Need a scheme the builders don't cover? Construct a `Security` directly — the
+builders are thin wrappers over the same interface. Set `scheme`, wire
+extraction in `before`, and provide `unauthorized` (401) / `forbidden` (403)
+handlers.
 
 ## Type-Safe Request Values
 
@@ -386,7 +406,7 @@ import swaggerUI from 'swagger-ui-express';
 const ajv = new Ajv();
 ajv.opts.coerceTypes = true;
 
-// `auth` is the Security definition from "Secure Routes with Scopes"
+// `auth` is the Security built by bearerAuth() in "Secure Routes with Scheme Builders"
 const securities: Security[] = [auth];
 
 // base swagger document
