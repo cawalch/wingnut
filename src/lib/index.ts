@@ -502,17 +502,23 @@ export const method =
   })
 
 /**
- * scopeWrapper
- *
- * Wraps Express RequestHandler's inside scoped middleware.
- * Used to create middleware that maps to Security scopes.
+ * Build a fail-closed authorization gate from scope predicates. `combine`
+ * decides the strategy: OR (any scope passes — `scope()`) or AND (every
+ * scope passes — `allScopes()`). On success the gate calls `next()`; on
+ * failure it delegates to the Security's `forbidden` (403) handler.
  */
-export const scopeWrapper =
-  <User = unknown>(cb: RequestHandler, scopes: ScopeHandler<User>[]) =>
-  (req: Request, res: Response, next: NextFunction) => {
+const scopeGate =
+  <User = unknown>(
+    cb: RequestHandler,
+    scopes: ScopeHandler<User>[],
+    combine: (results: boolean[]) => boolean,
+  ): RequestHandler =>
+  (req, res, next) => {
     // `req.user` is populated at runtime by the Security `before` hook; the
     // cast narrows to AuthedRequest<User> for typed scope handlers.
-    const isAuthorized = scopes.some((v) => v(req as AuthedRequest<User>, res))
+    const isAuthorized = combine(
+      scopes.map((handler) => handler(req as AuthedRequest<User>, res)),
+    )
     if (isAuthorized) {
       next()
     } else {
@@ -521,9 +527,65 @@ export const scopeWrapper =
   }
 
 /**
+ * scopeWrapper
+ *
+ * OR-semantics gate: authorize when ANY scope predicate passes. Backs
+ * `scope()`. Kept as a named export for callers composing custom middleware.
+ */
+export const scopeWrapper = <User = unknown>(
+  cb: RequestHandler,
+  scopes: ScopeHandler<User>[],
+): RequestHandler =>
+  scopeGate<User>(cb, scopes, (results) => results.some(Boolean))
+
+/**
+ * allScopesWrapper
+ *
+ * AND-semantics gate: authorize only when EVERY scope predicate passes.
+ * Backs `allScopes()`.
+ */
+export const allScopesWrapper = <User = unknown>(
+  cb: RequestHandler,
+  scopes: ScopeHandler<User>[],
+): RequestHandler =>
+  scopeGate<User>(cb, scopes, (results) => results.every(Boolean))
+
+/** Resolve scope names to their handler predicates, throwing on a missing name. */
+const resolveScopeHandlers = <T, User>(
+  security: Security<T, User>,
+  scopes: (keyof NamedHandler<T, User>)[],
+): ScopeHandler<User>[] =>
+  scopes.map((s) => {
+    const handler = security.scopes[s]
+    if (!handler) {
+      throw new Error(
+        `WingnutError: Scope '${String(s)}' not found in security.scopes`,
+      )
+    }
+    return handler
+  })
+
+/** Build a ScopeObject that runs `before` then a gate combining the scopes. */
+const buildScope = <T, User>(
+  security: Security<T, User>,
+  scopes: (keyof NamedHandler<T, User>)[],
+  wrap: (cb: RequestHandler, handlers: ScopeHandler<User>[]) => RequestHandler,
+): ScopeObject => ({
+  auth: security.name,
+  scopes,
+  middleware: [
+    ...(security.before ? [security.before] : []),
+    wrap(security.forbidden, resolveScopeHandlers(security, scopes)),
+  ],
+  responses: security.responses,
+})
+
+/**
  * scope
  *
- * Create a user security scope.
+ * Create a user security scope with OR semantics — the request is
+ * authorized when ANY listed scope predicate passes. Emits a single-scheme
+ * `security` entry.
  *
  * ```typescript
  * import { Request, Response } from 'express'
@@ -550,32 +612,39 @@ export const scopeWrapper =
 export const scope = <T = string, User = unknown>(
   security: Security<T, User>,
   ...scopes: (keyof NamedHandler<T, User>)[]
-): ScopeObject => {
-  const scopeMiddlewares = scopes.map((s) => {
-    const handler = security.scopes[s]
-    if (!handler) {
-      throw new Error(
-        `WingnutError: Scope '${String(s)}' not found in security.scopes`,
-      )
-    }
-    return handler
-  })
+): ScopeObject => buildScope(security, scopes, scopeWrapper<User>)
 
-  return {
-    auth: security.name,
-    scopes,
-    middleware: [
-      ...(security.before ? [security.before] : []),
-      scopeWrapper<User>(security.forbidden, scopeMiddlewares),
-    ],
-    responses: security.responses,
-  }
-}
+/**
+ * allScopes
+ *
+ * AND-require multiple scopes from one Security. Unlike `scope()` — which
+ * authorizes when ANY listed scope passes (OR) — `allScopes()` requires
+ * EVERY listed scope to pass; a request missing any scope is forbidden
+ * (403). The emitted `security` entry is identical to `scope()`'s (a single
+ * scheme carrying all the named scopes); only the runtime combination
+ * differs.
+ *
+ * ```typescript
+ * // Require BOTH 'read' AND 'paid' — a free-tier user with only 'read' is denied.
+ * const paidReader = authPathOp(allScopes(auth, 'read', 'paid'))
+ * ```
+ */
+export const allScopes = <T = string, User = unknown>(
+  security: Security<T, User>,
+  ...scopes: (keyof NamedHandler<T, User>)[]
+): ScopeObject => buildScope(security, scopes, allScopesWrapper<User>)
 
 /**
  * authPathOp
  *
- * Authorization middleware builder.
+ * Authorization middleware builder. Accepts one or more scope requirements:
+ * a single `ScopeObject` (from `scope()` / `allScopes()`) for one scheme, or
+ * several — / the result of `both(...)` — to AND-combine multiple schemes.
+ * Each requirement's middleware runs in order, and every requirement must
+ * pass; the first failing requirement rejects the request via its own 401
+ * (unauthenticated) or 403 (forbidden) handler. The emitted `security`
+ * array mirrors the OpenAPI rule that entries are AND'd, so docs and
+ * enforcement agree.
  *
  * ```typescript
  * // create admin authorization middleware guard
@@ -589,22 +658,48 @@ export const scope = <T = string, User = unknown>(
  *    ]
  *  })
  * )
+ *
+ * // AND-combine two schemes — both bearerAuth AND apiKey are required
+ * authPathOp(both(scope(jwt, 'admin'), scope(key, 'admin')))(
+ *  getMethod({ middleware: [] }),
+ * )
  * ```
  */
 export const authPathOp =
-  (scope: ScopeObject) =>
+  (first: ScopeObject | ScopeObject[], ...rest: ScopeObject[]) =>
   (pathObject: PathObject): PathObject => {
+    const scopes = Array.isArray(first) ? [...first, ...rest] : [first, ...rest]
     const result: PathObject = {}
     for (const [method, operation] of Object.entries(pathObject)) {
       ;(result as Record<string, PathOperation>)[method] = {
         ...operation,
-        security: [{ [scope.auth]: scope.scopes }],
-        scope: [scope],
-        responses: { ...operation.responses, ...scope.responses },
+        security: scopes.map((s) => ({ [s.auth]: s.scopes })),
+        scope: scopes,
+        responses: scopes.reduce<MediaSchemaItem>(
+          (acc, s) => ({ ...acc, ...s.responses }),
+          { ...operation.responses },
+        ),
       }
     }
     return result
   }
+
+/**
+ * both
+ *
+ * AND-combine multiple schemes (e.g. `bearerAuth` AND `apiKey`). Returns
+ * the requirements for `authPathOp`, which runs each scheme's middleware in
+ * order and emits a multi-entry `security` array. OpenAPI AND's array
+ * entries, so the served docs and the runtime enforcement agree: every
+ * scheme must be satisfied. For within-scheme OR/AND use `scope()` /
+ * `allScopes()`.
+ *
+ * ```typescript
+ * // Require a valid JWT AND a valid API key.
+ * authPathOp(both(scope(jwt, 'admin'), scope(key, 'admin')))(putMethod({ ... }))
+ * ```
+ */
+export const both = (...scopes: ScopeObject[]): ScopeObject[] => scopes
 
 /**
  * securitySchemes
