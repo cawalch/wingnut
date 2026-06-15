@@ -172,14 +172,16 @@ jobs:
           format: cyclonedx-json
           output-file: sbom.cdx.json
 
+      # Mode is auto-detected from inputs: subject-path alone → SLSA build
+      # provenance; subject-path + sbom-path → SBOM attestation.
       - name: Attest SBOM to tarball
-        uses: actions/attest-sbom@v4
+        uses: actions/attest@v4
         with:
           subject-path: ${{ env.tarball }}
           sbom-path: sbom.cdx.json
 
       - name: Attest build provenance to tarball
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest@v4
         with:
           subject-path: ${{ env.tarball }}
 
