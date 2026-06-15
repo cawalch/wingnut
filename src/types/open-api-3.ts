@@ -8,8 +8,8 @@ export type NamedHandler<S = string, User = unknown> = Record<
 
 /**
  * A request carrying an optional auth context — the shape scope handlers and
- * `verify` see. `User` defaults to `unknown`, so `req.user` typing is opt-in
- * (Layer 3). Populate it via `Security<User>` / the scheme builders.
+ * `verify` see. `User` defaults to `unknown`, so `req.user` typing is opt-in.
+ * Populate it via `Security<User>` / the scheme builders.
  */
 export type AuthedRequest<User = unknown> = Request & { user?: User }
 
