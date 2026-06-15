@@ -12,6 +12,7 @@
  */
 import type { Request, RequestHandler } from 'express'
 import type {
+  AuthedRequest,
   MediaSchemaItem,
   NamedHandler,
   OAuthFlowsObject,
@@ -24,9 +25,9 @@ import type { Security } from './index'
  * the request to the 401 handler. Populate `req.user` here (bring-your-own
  * crypto).
  */
-export type Verify = (
+export type Verify<User = unknown> = (
   credential: string,
-  req: Request,
+  req: AuthedRequest<User>,
 ) => boolean | Promise<boolean>
 
 // Token capture starts with \S (non-whitespace) so the \s+ separator and
@@ -65,9 +66,9 @@ const defaultResponses: MediaSchemaItem = {
  * (401) handler or proceeds to `next()` so the scope layer can authorize.
  */
 const buildVerifyBefore =
-  (
+  <User = unknown>(
     extract: (req: Request) => string | undefined,
-    verify: Verify,
+    verify: Verify<User>,
     unauthorized: RequestHandler,
   ): RequestHandler =>
   async (req, res, next) => {
@@ -90,25 +91,25 @@ const buildVerifyBefore =
   }
 
 /** Fields shared by every scheme-builder config. */
-interface SchemeAuthConfig<S extends string> {
+interface SchemeAuthConfig<S extends string, User = unknown> {
   /** components.securitySchemes key + per-operation security reference name. */
   name: string
   description?: string
   /** Caller-supplied verification. `false` or a throw → 401. */
-  verify: Verify
+  verify: Verify<User>
   /** Override the default 401 handler. */
   unauthorized?: RequestHandler
   /** Override the default 403 handler. */
   forbidden?: RequestHandler
   /** Authorization scope handlers — the authorization half. */
-  scopes?: NamedHandler<S>
+  scopes?: NamedHandler<S, User>
   /** Override or extend the default 401/403 response documentation. */
   responses?: MediaSchemaItem
 }
 
-const resolveScopes = <S extends string>(
-  scopes: NamedHandler<S> | undefined,
-): NamedHandler<S> => (scopes ?? {}) as NamedHandler<S>
+const resolveScopes = <S extends string, User = unknown>(
+  scopes: NamedHandler<S, User> | undefined,
+): NamedHandler<S, User> => (scopes ?? {}) as NamedHandler<S, User>
 
 /**
  * bearerAuth
@@ -118,24 +119,21 @@ const resolveScopes = <S extends string>(
  * `{ type: 'http', scheme: 'bearer' }` securityScheme.
  *
  * ```typescript
- * interface AuthedRequest extends Request {
- *   user?: { role: string }
- * }
- *
- * const jwt = bearerAuth({
+ * const jwt = bearerAuth<'admin', { role: string }>({
  *   name: 'bearerAuth',
  *   description: 'JWT access token',
  *   bearerFormat: 'JWT',
  *   verify: (token, req) => {
  *     try {
- *       ;(req as AuthedRequest).user = verifyJwt(token) // caller's lib
+ *       req.user = verifyJwt(token) // req.user is { role: string } | undefined
  *       return true
  *     } catch {
  *       return false // → 401
  *     }
  *   },
  *   scopes: {
- *     admin: (req) => (req as AuthedRequest).user?.role === 'admin',
+ *     // req.user typed from the generic — no manual cast
+ *     admin: (req) => req.user?.role === 'admin',
  *   },
  * })
  *
@@ -143,12 +141,12 @@ const resolveScopes = <S extends string>(
  * const editUser = authPathOp(scope(jwt, 'admin'))(putMethod({ ... }))
  * ```
  */
-export const bearerAuth = <S extends string = string>(
-  config: SchemeAuthConfig<S> & {
+export const bearerAuth = <S extends string = string, User = unknown>(
+  config: SchemeAuthConfig<S, User> & {
     /** `bearerFormat` for the scheme (e.g. 'JWT'). Omitted from the scheme when unset. */
     bearerFormat?: string
   },
-): Security<S> => {
+): Security<S, User> => {
   const unauthorized = config.unauthorized ?? defaultUnauthorized
   const scheme: SecuritySchemeObject = { type: 'http', scheme: 'bearer' }
   if (config.bearerFormat) scheme.bearerFormat = config.bearerFormat
@@ -174,25 +172,25 @@ export const bearerAuth = <S extends string = string>(
  * `in: 'cookie'`.
  *
  * ```typescript
- * const key = apiKey({
+ * const key = apiKey<"ok", UserShape>({
  *   name: 'apiKey',
  *   in: 'header',
  *   fieldName: 'X-API-Key',
  *   verify: (value, req) => {
- *     ;(req as AuthedRequest).user = lookupKey(value)
+ *     req.user = lookupKey(value)
  *     return !!req.user
  *   },
  * })
  * ```
  */
-export const apiKey = <S extends string = string>(
-  config: SchemeAuthConfig<S> & {
+export const apiKey = <S extends string = string, User = unknown>(
+  config: SchemeAuthConfig<S, User> & {
     /** Location of the credential. */
     in: 'query' | 'header' | 'cookie'
     /** Header name, query parameter, or cookie name (the OpenAPI `name` field). */
     fieldName: string
   },
-): Security<S> => {
+): Security<S, User> => {
   const unauthorized = config.unauthorized ?? defaultUnauthorized
   const extract = (req: Request): string | undefined => {
     if (config.in === 'header') {
@@ -243,18 +241,18 @@ export const apiKey = <S extends string = string>(
  *     },
  *   },
  *   verify: (token, req) => {
- *     ;(req as AuthedRequest).user = verifyAccessToken(token)
+ *     req.user = verifyAccessToken(token)
  *     return !!req.user
  *   },
  * })
  * ```
  */
-export const oauth2 = <S extends string = string>(
-  config: SchemeAuthConfig<S> & {
+export const oauth2 = <S extends string = string, User = unknown>(
+  config: SchemeAuthConfig<S, User> & {
     /** OpenAPI OAuth Flows Object — required for an oauth2 scheme. */
     flows: OAuthFlowsObject
   },
-): Security<S> => {
+): Security<S, User> => {
   const unauthorized = config.unauthorized ?? defaultUnauthorized
   const scheme: SecuritySchemeObject = { type: 'oauth2', flows: config.flows }
   if (config.description) scheme.description = config.description

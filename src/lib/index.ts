@@ -13,6 +13,7 @@ import {
 } from '../types/common'
 import {
   AppObject,
+  AuthedRequest,
   inMap,
   MediaSchemaItem,
   NamedHandler,
@@ -40,7 +41,7 @@ export type ValidateByParam = Record<
   AjvLikeValidateFunction | undefined
 >
 
-export interface Security<S = string> {
+export interface Security<S = string, User = unknown> {
   name: string
   /**
    * OpenAPI Security Scheme documentation for this definition. Emitted into
@@ -66,9 +67,30 @@ export interface Security<S = string> {
    * 401/403 distinction is explicit on the definition.
    */
   forbidden: RequestHandler
-  scopes: NamedHandler<S>
+  /**
+   * Authorization scope handlers. Each receives a typed `req.user` when
+   * `User` is supplied (Layer 3), evaluated with OR semantics by `scope()`.
+   */
+  scopes: NamedHandler<S, User>
   responses?: MediaSchemaItem
 }
+
+/**
+ * Derive the authed-request shape from a `Security` definition — the typed
+ * `req` a handler sees once authentication has populated `req.user`. Pure
+ * type-level, zero runtime cost; parallels `WnDataType` for schemas.
+ *
+ * ```typescript
+ * const auth = bearerAuth<'admin', { id: string; role: string }>({ ... })
+ * type Authed = WnAuthType<typeof auth> // Request & { user?: { id, role } }
+ *
+ * const handler = (req: Authed, res: Response) => {
+ *   req.user?.id // string | undefined — no manual casts
+ * }
+ * ```
+ */
+export type WnAuthType<Sec extends Security<any, any>> =
+  Sec extends Security<any, infer User> ? AuthedRequest<User> : never
 
 export const app = (a: AppObject): AppObject => a
 
@@ -486,9 +508,11 @@ export const method =
  * Used to create middleware that maps to Security scopes.
  */
 export const scopeWrapper =
-  (cb: RequestHandler, scopes: ScopeHandler[]) =>
+  <User = unknown>(cb: RequestHandler, scopes: ScopeHandler<User>[]) =>
   (req: Request, res: Response, next: NextFunction) => {
-    const isAuthorized = scopes.some((v) => v(req, res))
+    // `req.user` is populated at runtime by the Security `before` hook; the
+    // cast narrows to AuthedRequest<User> for typed scope handlers.
+    const isAuthorized = scopes.some((v) => v(req as AuthedRequest<User>, res))
     if (isAuthorized) {
       next()
     } else {
@@ -499,50 +523,33 @@ export const scopeWrapper =
 /**
  * scope
  *
- * Create a user security scope
+ * Create a user security scope.
  *
  * ```typescript
  * import { Request, Response } from 'express'
  *
- * // user session interface
- * interface UserAuth extends Request {
- *    user?: {
- *      level: number
- *    }
- * }
+ * // The user shape is carried by Security<string, User> — no manual
+ * // `extends Request` interface needed (Layer 3).
+ * const userLevel = (minLevel: number): ScopeHandler<{ level: number }> =>
+ *   (req) => (req.user?.level ?? 0) > minLevel
  *
- * // authorization middleware based on user level
- * const userLevel = (minLevel: number): ScopeHandler => (
- *    req: UserAuth
- * ): boolean => (req.user?.level ?? 0) > minLevel
- *
- * // authorization security definition
- * const auth: Security = {
+ * const auth: Security<string, { level: number }> = {
  *  name: 'auth',
- *  // OpenAPI security scheme doc, emitted into components.securitySchemes
  *  scheme: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
- *  // 403 forbidden handler (authenticated but missing scope)
- *  forbidden: (_req: Request, res: Response) => {
- *    res.status(403).send('Forbidden')
- *  },
+ *  forbidden: (_req, res) => res.status(403).send('Forbidden'),
  *  scopes: {
  *    admin: userLevel(100),
  *    moderator: userLevel(50)
  *  },
- *  responses: {
- *    '403': {
- *      description: 'Forbidden'
- *    }
- *  }
+ *  responses: { '403': { description: 'Forbidden' } }
  * }
  *
- * // build admin authorization middleware
  * const adminAuth = authPathOp(scope(auth, 'admin'))
  * ```
  */
-export const scope = <T = string>(
-  security: Security<T>,
-  ...scopes: (keyof NamedHandler<T>)[]
+export const scope = <T = string, User = unknown>(
+  security: Security<T, User>,
+  ...scopes: (keyof NamedHandler<T, User>)[]
 ): ScopeObject => {
   const scopeMiddlewares = scopes.map((s) => {
     const handler = security.scopes[s]
@@ -559,7 +566,7 @@ export const scope = <T = string>(
     scopes,
     middleware: [
       ...(security.before ? [security.before] : []),
-      scopeWrapper(security.forbidden, scopeMiddlewares),
+      scopeWrapper<User>(security.forbidden, scopeMiddlewares),
     ],
     responses: security.responses,
   }
@@ -712,6 +719,7 @@ export const asyncPutMethod = asyncMethod('put', asyncWrapper)
 
 export const asyncDeleteMethod = asyncMethod('delete', asyncWrapper)
 
+export type { AuthedRequest } from '../types/open-api-3'
 export type {
   WnDataType,
   WnNumberType,
