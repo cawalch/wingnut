@@ -295,7 +295,81 @@ Wingnut ships **no** JWT/OAuth/session library — bring your own crypto. The
 scheme builders compose the middleware and document the scheme; you supply
 `verify` and populate `req.user`.
 
-### Typed auth context (Layer 3)
+### Combining scopes & schemes (AND)
+
+`scope()` OR-matches — a request is authorized when **any** listed scope
+passes. Real authorization rules often need AND: "every one of these
+scopes" or "every one of these schemes". Two combinators cover it, and both
+emit OpenAPI the spec mandates, so docs and enforcement agree.
+
+**`allScopes(auth, ...names)`** — AND within one scheme. Every named scope
+must pass; a request missing any one is forbidden (**403**). The emitted
+`security` entry is identical to `scope()`'s — only the runtime combination
+differs.
+
+```typescript
+import { allScopes, authPathOp } from "wingnut";
+
+const auth = bearerAuth<"read" | "paid", AppUser>({
+  name: "bearerAuth",
+  verify: (token, req) => {
+    req.user = verifyJwt(token);
+    return !!req.user;
+  },
+  scopes: {
+    read: (req) => req.user?.canRead ?? false,
+    paid: (req) => req.user?.isPaid ?? false,
+  },
+});
+
+// Require BOTH 'read' AND 'paid' — a free-tier user with only 'read' is denied.
+// Contrast: scope(auth, "read", "paid") would admit them (OR).
+const paidReader = authPathOp(allScopes(auth, "read", "paid"));
+```
+
+**`both(...requirements)`** — AND across schemes. Each scheme's middleware
+runs in order and every scheme must be satisfied; the first failing scheme
+rejects the request via its own **401** (unauthenticated) or **403**
+(forbidden) handler. `authPathOp` accepts the requirements directly or via
+`both(...)`.
+
+```typescript
+import { apiKey, bearerAuth, both, scope, authPathOp } from "wingnut";
+
+const jwt = bearerAuth<"admin", AppUser>({
+  name: "bearerAuth",
+  verify: (token, req) => {
+    req.user = verifyJwt(token);
+    return !!req.user;
+  },
+  scopes: { admin: (req) => req.user?.level >= 100 },
+});
+
+const key = apiKey<"admin", AppUser>({
+  name: "apiKey",
+  in: "header",
+  fieldName: "X-API-Key",
+  verify: (value, req) => {
+    req.user = lookupKey(value);
+    return !!req.user;
+  },
+  scopes: { admin: (req) => req.user?.level >= 100 },
+});
+
+// Require a valid JWT AND a valid API key. Emits security: [
+//   { bearerAuth: ["admin"] }, { apiKey: ["admin"] }
+// ] — OpenAPI AND's array entries, so Swagger UI / Redoc show both required.
+const twoFactor = authPathOp(both(scope(jwt, "admin"), scope(key, "admin")));
+
+// Equivalent — authPathOp is variadic and accepts the requirements directly.
+const twoFactorAlt = authPathOp(scope(jwt, "admin"), scope(key, "admin"));
+```
+
+There is intentionally **no cross-scheme OR** combinator. OpenAPI 3.0's
+`security` array is AND-only, so an honest `either(...)` cannot be emitted
+without docs/runtime drift. For within-scheme OR, use `scope()`.
+
+### Typed auth context
 
 Each builder accepts `<Scopes, User>` generics that flow to `verify` and
 scope handlers — no manual `extends Request` interfaces or casts. Derive the

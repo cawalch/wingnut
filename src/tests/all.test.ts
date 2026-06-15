@@ -11,12 +11,15 @@ import { assert, beforeEach, describe, expect, it, vi } from 'vitest'
 import { app, createSchemaCache, headerParam, path, wingnut } from '../lib'
 import { ValidationError, WingnutError } from '../lib/errors'
 import {
+  allScopes,
+  allScopesWrapper,
   apiKey,
   asyncGetMethod,
   asyncPostMethod,
   asyncWrapper,
   authPathOp,
   bearerAuth,
+  both,
   getMethod,
   groupByParamIn,
   oauth2,
@@ -35,6 +38,7 @@ import {
   ParamIn,
   ParamType,
   ScopeHandler,
+  ScopeObject,
 } from '../types/open-api-3'
 
 const createParameter = (
@@ -1781,6 +1785,241 @@ describe('ScopeWrapper', () => {
     )
     expect(next).toHaveBeenCalledTimes(1)
     expect(cb).not.toHaveBeenCalled()
+  })
+})
+
+describe('allScopesWrapper', () => {
+  let req: Request
+  let res: Response
+  let next: ReturnType<typeof vi.fn>
+  let cb: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    next = vi.fn()
+    cb = vi.fn()
+    req = {} as Request
+    res = {} as Response
+  })
+
+  it('AND: calls next() only when EVERY scope passes', () => {
+    const scopes = [() => true, () => true]
+    allScopesWrapper(cb as unknown as RequestHandler, scopes)(
+      req,
+      res,
+      next as unknown as NextFunction,
+    )
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(cb).not.toHaveBeenCalled()
+  })
+
+  it('AND: calls cb when any scope fails', () => {
+    const scopes = [() => true, () => false]
+    allScopesWrapper(cb as unknown as RequestHandler, scopes)(
+      req,
+      res,
+      next as unknown as NextFunction,
+    )
+    expect(cb).toHaveBeenCalledTimes(1)
+    expect(next).not.toHaveBeenCalled()
+  })
+
+  it('AND: calls cb when all scopes fail', () => {
+    const scopes = [() => false, () => false]
+    allScopesWrapper(cb as unknown as RequestHandler, scopes)(
+      req,
+      res,
+      next as unknown as NextFunction,
+    )
+    expect(cb).toHaveBeenCalledTimes(1)
+    expect(next).not.toHaveBeenCalled()
+  })
+})
+
+/** A Security whose scopes read boolean flags off request headers — no token
+ * extraction, so the AND/OR combination of scopes is what decides access. */
+const flagAuth = (flags: Record<string, string>): Security => ({
+  name: 'auth',
+  // No credential extraction — scope predicates own the decision.
+  before: (_req, _res, next) => next(),
+  forbidden: (_req, res) => res.status(403).send('Forbidden'),
+  scopes: Object.fromEntries(
+    Object.entries(flags).map(([name, header]) => [
+      name,
+      (req: Request) => req.headers[header] === '1',
+    ]),
+  ) as Record<string, ScopeHandler>,
+  responses: { '403': { description: 'Forbidden' } },
+})
+
+/** A Security that requires a specific header value to authenticate; its
+ * single `ok` scope is satisfied once the header is present. */
+const headerScheme = (name: string, header: string): Security => ({
+  name,
+  before: (req, res, next) => {
+    if (req.headers[header] !== 'ok') {
+      res.status(401).send('Unauthenticated')
+      return
+    }
+    next()
+  },
+  unauthorized: (_req, res) => res.status(401).send('Unauthenticated'),
+  forbidden: (_req, res) => res.status(403).send('Forbidden'),
+  scopes: { ok: (req: Request) => req.headers[header] === 'ok' },
+  responses: {
+    '401': { description: 'Unauthenticated' },
+    '403': { description: 'Forbidden' },
+  },
+})
+
+/** Mount a secured GET /api/me on a fresh Express app and return it. */
+const mountSecured = (requirements: ScopeObject | ScopeObject[]) => {
+  const { route, paths, controller } = wingnut(ajv)
+  const app = express()
+  paths(
+    app,
+    controller({
+      prefix: '/api',
+      route: (r: Router) =>
+        route(
+          r,
+          path(
+            '/me',
+            authPathOp(requirements)(
+              getMethod({
+                middleware: [
+                  (_req: Request, res: Response) => res.status(200).send('ok'),
+                ],
+              }),
+            ),
+          ),
+        ),
+    }),
+  )
+  return app
+}
+
+describe('composition algebra', () => {
+  describe('allScopes (AND within a scheme)', () => {
+    it('throws on a missing scope, like scope()', () => {
+      const auth = flagAuth({ read: 'x-read' })
+      expect(() => allScopes(auth, 'read', 'nonexistent')).toThrow(
+        "WingnutError: Scope 'nonexistent' not found in security.scopes",
+      )
+    })
+
+    it('authorizes only when every named scope passes', async () => {
+      const auth = flagAuth({ read: 'x-read', paid: 'x-paid' })
+      const app = mountSecured(allScopes(auth, 'read', 'paid'))
+
+      // both flags → 200
+      let res = await request(app)
+        .get('/api/me')
+        .set('x-read', '1')
+        .set('x-paid', '1')
+      expect(res.status).toBe(200)
+
+      // only `read` → 403 (missing `paid`)
+      res = await request(app).get('/api/me').set('x-read', '1')
+      expect(res.status).toBe(403)
+
+      // neither → 403
+      res = await request(app).get('/api/me')
+      expect(res.status).toBe(403)
+    })
+
+    it('emits a single-scheme security entry carrying all the scopes', () => {
+      const auth = flagAuth({ read: 'x-read', paid: 'x-paid' })
+      const secured = authPathOp(allScopes(auth, 'read', 'paid'))(
+        getMethod({ middleware: [] }),
+      )
+      // Same single-scheme shape as scope() — only runtime combination differs.
+      expect(secured.get?.security).toStrictEqual([{ auth: ['read', 'paid'] }])
+      expect(secured.get?.scope).toHaveLength(1)
+    })
+
+    it('differs from scope() (OR) — a partial match is denied under AND', async () => {
+      const auth = flagAuth({ read: 'x-read', paid: 'x-paid' })
+      const orApp = mountSecured(scope(auth, 'read', 'paid'))
+      const andApp = mountSecured(allScopes(auth, 'read', 'paid'))
+
+      // Under OR (scope), a `read`-only request is authorized.
+      expect(
+        (await request(orApp).get('/api/me').set('x-read', '1')).status,
+      ).toBe(200)
+      // Under AND (allScopes), the same partial request is forbidden.
+      expect(
+        (await request(andApp).get('/api/me').set('x-read', '1')).status,
+      ).toBe(403)
+    })
+  })
+
+  describe('both (AND across schemes)', () => {
+    it('authorizes only when every scheme is satisfied', async () => {
+      const a = headerScheme('schemeA', 'x-a')
+      const b = headerScheme('schemeB', 'x-b')
+      const app = mountSecured(both(scope(a, 'ok'), scope(b, 'ok')))
+
+      // both schemes → 200
+      let res = await request(app)
+        .get('/api/me')
+        .set('x-a', 'ok')
+        .set('x-b', 'ok')
+      expect(res.status).toBe(200)
+
+      // only schemeA → 401 (schemeB's extraction fails closed)
+      res = await request(app).get('/api/me').set('x-a', 'ok')
+      expect(res.status).toBe(401)
+
+      // neither → 401
+      res = await request(app).get('/api/me')
+      expect(res.status).toBe(401)
+    })
+
+    it('emits a multi-entry security array (OpenAPI AND) and merges responses', () => {
+      const a = headerScheme('schemeA', 'x-a')
+      const b = headerScheme('schemeB', 'x-b')
+      const secured = authPathOp(both(scope(a, 'ok'), scope(b, 'ok')))(
+        getMethod({
+          middleware: [],
+          responses: { '200': { description: 'OK' } },
+        }),
+      )
+      // OpenAPI AND's array entries — both schemes required.
+      expect(secured.get?.security).toStrictEqual([
+        { schemeA: ['ok'] },
+        { schemeB: ['ok'] },
+      ])
+      expect(secured.get?.scope).toHaveLength(2)
+      // 401/403 merged from both schemes, 200 preserved from the operation.
+      expect(secured.get?.responses).toStrictEqual({
+        '200': { description: 'OK' },
+        '401': { description: 'Unauthenticated' },
+        '403': { description: 'Forbidden' },
+      })
+    })
+
+    it('accepts the requirements as rest args too (authPathOp is variadic)', () => {
+      const a = headerScheme('schemeA', 'x-a')
+      const b = headerScheme('schemeB', 'x-b')
+      const viaRest = authPathOp(
+        scope(a, 'ok'),
+        scope(b, 'ok'),
+      )(getMethod({ middleware: [] }))
+      const viaBoth = authPathOp(both(scope(a, 'ok'), scope(b, 'ok')))(
+        getMethod({ middleware: [] }),
+      )
+      expect(viaRest.get?.security).toStrictEqual(viaBoth.get?.security)
+      expect(viaRest.get?.scope).toHaveLength(2)
+    })
+  })
+
+  it('authPathOp stays backward-compatible with a single ScopeObject', () => {
+    const auth = flagAuth({ admin: 'x-admin' })
+    const secured = authPathOp(scope(auth, 'admin'))(
+      getMethod({ middleware: [] }),
+    )
+    expect(secured.get?.security).toStrictEqual([{ auth: ['admin'] }])
+    expect(secured.get?.scope).toHaveLength(1)
   })
 })
 
