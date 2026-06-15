@@ -6,12 +6,21 @@ on:
     tags:
       - 'v*'
   pull_request:
+  schedule:
+    - cron: '30 1 * * 1' # weekly Mon 01:30 UTC — drives the scorecard posture scan
+  workflow_dispatch:
+
+# Least privilege at the top level; jobs that need more (id-token, attestations,
+# security-events) grant it explicitly below.
 permissions:
   contents: read
-  id-token: write  # Required for npm provenance
 
 jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # build: verify every push / PR. Skipped on schedule (scorecard owns that).
+  # ──────────────────────────────────────────────────────────────────────────
   build:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -24,7 +33,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22
-          registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -50,8 +58,167 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  # ──────────────────────────────────────────────────────────────────────────
+  # dependency-review: block PRs that introduce known-vulnerable or
+  # low-Scorecard dependencies. Runs on pull requests only.
+  # ──────────────────────────────────────────────────────────────────────────
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@v5
+        with:
+          # Fail on high/critical advisories; warn on moderate/low.
+          fail-on-severity: high
+          # Warn when a changed dependency has a poor OpenSSF Scorecard score.
+          warn-on-openssf-scorecard-level: 5
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # publish: the critical path. OIDC trusted publishing — npm authenticates
+  # with a short-lived token verified against the trusted-publisher config
+  # (ci-cd.yml, cawalch/wingnut, main environment). npm emits provenance
+  # automatically. No NPM_TOKEN secret.
+  # ──────────────────────────────────────────────────────────────────────────
+  publish:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    # Must match the environment on the npm trusted-publisher config; npm
+    # verifies the OIDC environment claim against this.
+    environment: main
+    permissions:
+      contents: read
+      id-token: write # OIDC: GitHub issues a token npm verifies against the trusted publisher
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org' # required for OIDC auth
+          cache: 'pnpm'
+
+      # Node 22 bundles npm 10; trusted publishing (OIDC) requires npm >= 11.5.1.
+      - name: Upgrade npm
+        run: npm install -g npm@^11
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      # Trusted publishing: npm authenticates via the OIDC token issued to this
+      # job's environment. Provenance is generated automatically under TP.
       - name: Publish to npm
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: pnpm publish --provenance --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # attest: best-effort supply-chain attestations for the published artifact.
+  # Generates an SBOM (Syft) and binds it + build provenance to the packed
+  # tarball via signed in-toto/Sigstore attestations, queryable with
+  # `gh attestation verify`. Intentionally parallel to publish (does not gate
+  # it): a tooling hiccup here must never block a release.
+  # ──────────────────────────────────────────────────────────────────────────
+  attest:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Sigstore signing of the attestations
+      attestations: write # write to GitHub's attestation store
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      # Pack the exact artifact that would be published; attestations bind to it.
+      - name: Pack tarball
+        run: echo "tarball=$(npm pack)" >> "$GITHUB_ENV"
+
+      # Generate a CycloneDX SBOM. Syft scans the installed dependency tree
+      # (handles pnpm's node_modules layout; npm's own `npm sbom` does not).
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+
+      - name: Attest SBOM to tarball
+        uses: actions/attest-sbom@v4
+        with:
+          subject-path: ${{ env.tarball }}
+          sbom-path: sbom.cdx.json
+
+      - name: Attest build provenance to tarball
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: ${{ env.tarball }}
+
+      # Keep the SBOM + tarball retrievable from the run for audit.
+      - name: Upload SBOM and tarball
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-artifacts
+          path: |
+            sbom.cdx.json
+            ${{ env.tarball }}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # scorecard: weekly OpenSSF Scorecard posture scan. Surfaces supply-chain
+  # hygiene findings (dangerous workflows, unsigned releases, branch
+  # protection, etc.) in the repo Security tab. Runs on schedule + manual +
+  # main pushes.
+  # ──────────────────────────────────────────────────────────────────────────
+  scorecard:
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # post SARIF findings to the Security tab
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Run OpenSSF Scorecard
+        uses: ossf/scorecard-action@v2
+        with:
+          results_format: sarif
+          results_file: results.sarif
+          publish_results: true
+
+      - name: Upload Scorecard results to Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
