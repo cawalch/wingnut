@@ -69,7 +69,7 @@ export interface Security<S = string, User = unknown> {
   forbidden: RequestHandler
   /**
    * Authorization scope handlers. Each receives a typed `req.user` when
-   * `User` is supplied (Layer 3), evaluated with OR semantics by `scope()`.
+   * `User` is supplied, evaluated with OR semantics by `scope()`.
    */
   scopes: NamedHandler<S, User>
   responses?: MediaSchemaItem
@@ -529,7 +529,7 @@ export const scopeWrapper =
  * import { Request, Response } from 'express'
  *
  * // The user shape is carried by Security<string, User> — no manual
- * // `extends Request` interface needed (Layer 3).
+ * // `extends Request` interface needed.
  * const userLevel = (minLevel: number): ScopeHandler<{ level: number }> =>
  *   (req) => (req.user?.level ?? 0) > minLevel
  *
