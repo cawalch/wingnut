@@ -6,8 +6,6 @@ on:
     tags:
       - 'v*'
   pull_request:
-  schedule:
-    - cron: '30 1 * * 1' # weekly Mon 01:30 UTC — drives the scorecard posture scan
   workflow_dispatch:
 
 # Least privilege at the top level; jobs that need more (id-token, attestations,
@@ -193,35 +191,3 @@ jobs:
           path: |
             sbom.cdx.json
             ${{ env.tarball }}
-
-  # ──────────────────────────────────────────────────────────────────────────
-  # scorecard: weekly OpenSSF Scorecard posture scan. Surfaces supply-chain
-  # hygiene findings (dangerous workflows, unsigned releases, branch
-  # protection, etc.) in the repo Security tab. Runs on schedule + manual +
-  # main pushes.
-  # ──────────────────────────────────────────────────────────────────────────
-  scorecard:
-    if: >-
-      github.event_name == 'schedule' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write # post SARIF findings to the Security tab
-      id-token: write # OIDC token for publish_results (scorecards.dev badge)
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Run OpenSSF Scorecard
-        uses: ossf/scorecard-action@v2.4.3 # pin; floating @v2 is no longer resolvable by the action runner
-        with:
-          results_format: sarif
-          results_file: results.sarif
-          publish_results: true # publishes to securityscorecards.dev (powers the badge)
-
-      - name: Upload Scorecard results to Security tab
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: results.sarif
