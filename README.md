@@ -5,6 +5,7 @@ for validation and documentation.
 
 [![npm version](https://badge.fury.io/js/wingnut.svg)](https://badge.fury.io/js/wingnut)
 [![codecov](https://codecov.io/gh/cawalch/wingnut/graph/badge.svg?token=E7LJCNGZET)](https://codecov.io/gh/cawalch/wingnut)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/cawalch/wingnut/badge)](https://scorecard.dev/viewer/?uri=github.com/cawalch/wingnut)
 
 ## Installation
 
