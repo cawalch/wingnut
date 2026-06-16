@@ -38,6 +38,6 @@ jobs:
           publish_results: true # publishes to securityscorecards.dev (powers the badge)
 
       - name: Upload Scorecard results to Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4.36.2 # v3 deprecated Dec 2026 + runs on Node 20 (forced to Node 24 on 2026-06-16)
         with:
           sarif_file: results.sarif
