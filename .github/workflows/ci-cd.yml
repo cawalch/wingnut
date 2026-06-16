@@ -209,6 +209,7 @@ jobs:
     permissions:
       contents: read
       security-events: write # post SARIF findings to the Security tab
+      id-token: write # OIDC token for publish_results (scorecards.dev badge)
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -218,7 +219,7 @@ jobs:
         with:
           results_format: sarif
           results_file: results.sarif
-          publish_results: true
+          publish_results: true # publishes to securityscorecards.dev (powers the badge)
 
       - name: Upload Scorecard results to Security tab
         uses: github/codeql-action/upload-sarif@v3
