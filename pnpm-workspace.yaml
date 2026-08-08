@@ -9,4 +9,5 @@ overrides:
   vite: 7.3.5         # GHSA path traversal + arbitrary file read + fs.deny bypass (vitest mocker accepts ^7)
   qs: 6.15.2          # GHSA DoS via null/undefined entries + arrayLimit bypass (express/superagent)
   esbuild: 0.28.1     # GHSA RCE via NPM_CONFIG_REGISTRY + arbitrary file read (pulled by tsx via vite)
-  fast-uri: 3.1.2     # GHSA host confusion + path traversal (transitive of ajv; pinned exact)
+  fast-uri: 3.1.5     # GHSA host confusion + path traversal (transitive of ajv; pinned exact)
+  body-parser: 2.3.0  # GHSA DoS via Content-Length bypass + URL-encoded parsing (express)
