@@ -103,11 +103,43 @@ export interface PathItem {
   [path: string]: PathObject
 }
 
-export interface PathObject {
+/**
+ * The HTTP methods a route registration can actually pronounce — the keys
+ * of a `PathObject` that become `router[method](...)` calls. Everything
+ * else a `PathObject` may carry is OpenAPI path-level metadata and must
+ * not be treated as a route.
+ */
+export type HttpMethod =
+  | 'get'
+  | 'post'
+  | 'put'
+  | 'patch'
+  | 'delete'
+  | 'options'
+  | 'head'
+  | 'trace'
+
+/**
+ * OpenAPI path-level metadata: the non-method keys of a path item
+ * (`summary`, `description`, `servers`, `parameters`). These describe the
+ * path in the spec; they are not Express routes.
+ */
+export interface PathItemMetadata {
+  summary?: string
+  description?: string
+  servers?: { url: string; description?: string }[]
+  parameters?: Parameter[]
+}
+
+export interface PathObject extends PathItemMetadata {
   get?: PathOperation
   post?: PathOperation
   put?: PathOperation
+  patch?: PathOperation
   delete?: PathOperation
+  options?: PathOperation
+  head?: PathOperation
+  trace?: PathOperation
 }
 
 export type SecurityObject = {

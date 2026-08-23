@@ -14,6 +14,7 @@ import {
 import {
   AppObject,
   AuthedRequest,
+  HttpMethod,
   inMap,
   MediaSchemaItem,
   NamedHandler,
@@ -93,6 +94,25 @@ export type WnAuthType<Sec extends Security<any, any>> =
   Sec extends Security<any, infer User> ? AuthedRequest<User> : never
 
 export const app = (a: AppObject): AppObject => a
+
+/**
+ * The set of `HttpMethod` keys that route registration actually registers
+ * as Express routes. Other keys on a `PathObject` are OpenAPI path-level
+ * metadata and are deliberately left unrouted.
+ */
+export const HTTP_METHODS: readonly HttpMethod[] = [
+  'get',
+  'post',
+  'put',
+  'patch',
+  'delete',
+  'options',
+  'head',
+  'trace',
+]
+
+export const isHttpMethod = (key: string): key is HttpMethod =>
+  (HTTP_METHODS as readonly string[]).includes(key)
 
 export const groupByParamIn = (
   params: Parameter[],
@@ -269,7 +289,7 @@ export const wingnut = (ajv: AjvLike) => {
       pathOp,
       path,
       method,
-    }: { pathOp: PathOperation; path: string; method: string },
+    }: { pathOp: PathOperation; path: string; method: HttpMethod },
   ) => {
     const wrapper = pathOp.wrapper ?? ((cb) => cb)
 
@@ -338,6 +358,10 @@ export const wingnut = (ajv: AjvLike) => {
     router: pitems.reduce((urtr, pitem) => {
       Object.entries(pitem).forEach(([path, pathObj]) => {
         Object.entries(pathObj).forEach(([method, pathOp]) => {
+          // Path-level metadata (summary, description, ...) is not a route.
+          if (!isHttpMethod(method)) {
+            return
+          }
           mapRouter(urtr, { pathOp, path, method })
         })
       })
@@ -410,7 +434,7 @@ export const wingnut = (ajv: AjvLike) => {
       const p = c(router)
       p.forEach((item) => {
         const path = Object.keys(item)[0]
-        const methods = Object.keys(item[path])
+        const methods = Object.keys(item[path]).filter(isHttpMethod)
         for (const method of methods) {
           const full = `${method} ${path}`
           if (acc.track.has(full)) {
@@ -441,7 +465,7 @@ export const path = (path: string, ...pathObjects: PathObject[]): PathItem => ({
 
 export const asyncMethod =
   (
-    m: string,
+    m: HttpMethod,
     wrapper: (cb: AsyncRequestHandler) => ErrorRequestHandler | RequestHandler,
   ) =>
   (pop: PathOperation): PathObject => ({
@@ -496,7 +520,7 @@ export const asyncWrapper = (
 }
 
 export const method =
-  (m: string) =>
+  (m: HttpMethod) =>
   (pop: PathOperation): PathObject => ({
     [m]: pop,
   })
@@ -671,6 +695,12 @@ export const authPathOp =
     const scopes = Array.isArray(first) ? [...first, ...rest] : [first, ...rest]
     const result: PathObject = {}
     for (const [method, operation] of Object.entries(pathObject)) {
+      // Path-level metadata passes through untouched; only methods get the
+      // `security`/`scope`/`responses` treatment.
+      if (!isHttpMethod(method)) {
+        ;(result as Record<string, unknown>)[method] = operation
+        continue
+      }
       ;(result as Record<string, PathOperation>)[method] = {
         ...operation,
         security: scopes.map((s) => ({ [s.auth]: s.scopes })),
@@ -806,6 +836,9 @@ export const postMethod = method('post')
 export const putMethod = method('put')
 export const patchMethod = method('patch')
 export const deleteMethod = method('delete')
+export const optionsMethod = method('options')
+export const headMethod = method('head')
+export const traceMethod = method('trace')
 export const asyncGetMethod = asyncMethod('get', asyncWrapper)
 
 export const asyncPostMethod = asyncMethod('post', asyncWrapper)
@@ -813,6 +846,9 @@ export const asyncPatchMethod = asyncMethod('patch', asyncWrapper)
 export const asyncPutMethod = asyncMethod('put', asyncWrapper)
 
 export const asyncDeleteMethod = asyncMethod('delete', asyncWrapper)
+export const asyncOptionsMethod = asyncMethod('options', asyncWrapper)
+export const asyncHeadMethod = asyncMethod('head', asyncWrapper)
+export const asyncTraceMethod = asyncMethod('trace', asyncWrapper)
 
 export type { AuthedRequest } from '../types/open-api-3'
 export type {
