@@ -16,6 +16,8 @@ Install wingnut using `npm i wingnut`, or `pnpm i wingnut`, or `yarn i wingnut`.
 1. Express.js - `npm i express`
 2. Ajv - `npm i ajv`
 
+**Express compatibility:** supports Express 4 (>= 4.18.2) and Express 5 (`^4.18.2 || ^5.0.0`).
+
 ## Usage
 
 ```typescript
