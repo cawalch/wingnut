@@ -140,9 +140,7 @@ export const validateParams = (
       continue
     }
 
-    // Node lowercases incoming header names, so validate against the
-    // lowercased key for `in: header` params. The authored (mixed-case)
-    // name is preserved on the Parameter itself for emitted docs.
+    // Node lowercases incoming header names.
     const isHeader = paramIn === 'header' || param.in === 'header'
     const propertyName = isHeader ? param.name.toLowerCase() : param.name
 

@@ -186,8 +186,6 @@ describe('validateParams', () => {
       },
       required: ['x-api-key'],
     })
-    // The authored names on the Parameter objects must stay untouched so
-    // emitted OpenAPI docs can still present the mixed-case name.
     expect(params[0].name).toBe('X-API-Key')
   })
 
@@ -2338,12 +2336,10 @@ describe('headerParam', () => {
       }
     })
 
-    // Node lowercases incoming headers; authored name stays mixed-case.
     const response = await request(app)
       .get('/api/test')
       .set('x-api-key', 'secret')
     expect(response.status).toBe(200)
-    // The authored OpenAPI parameter name is preserved for emitted docs.
     expect(api['/test'].get?.parameters?.[0]?.name).toBe('X-API-Key')
   })
 
