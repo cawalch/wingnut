@@ -57,12 +57,8 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   # ──────────────────────────────────────────────────────────────────────────
-  # express-compat: verify the supported peer range (Express 4 and 5).
-  # Runs typecheck + the full test suite against each Express major with
-  # matching @types/express, so a type-level or behavioral regression on
-  # either major fails CI. Gates publish alongside build: a broken Express
-  # major must not ship.
-  #
+  # express-compat: typecheck + tests against the supported Express majors
+  # (4 and 5) with matching @types/express. Gates publish.
   # ──────────────────────────────────────────────────────────────────────────
   express-compat:
     if: github.event_name != 'schedule'
@@ -91,8 +87,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Swap in the matrix's Express major + matching types (devDeps only;
-      # the lockfile churn is confined to this throwaway CI checkout).
       - name: Install Express ${{ matrix.express }} peer candidate
         run: pnpm add -D express@${{ matrix.express }} @types/express@${{ matrix.types-express }}
 
