@@ -13,14 +13,7 @@ export const createWingnutAjv = (options: WingnutAjvOptions = {}): Ajv => {
   const { formats = true, coerceTypes = true, allErrors = true } = options
   const instance = new Ajv({ coerceTypes, allErrors })
   if (formats) {
-    let addFormats: (ajv: Ajv) => Ajv
-    try {
-      ;({ default: addFormats } = require('ajv-formats'))
-    } catch {
-      throw new Error(
-        "wingnut: createWingnutAjv({ formats: true }) needs the 'ajv-formats' package. Install it, or pass { formats: false }.",
-      )
-    }
+    const { default: addFormats } = require('ajv-formats')
     addFormats(instance)
   }
   return instance
