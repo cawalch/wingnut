@@ -126,6 +126,7 @@ export const groupByParamIn = (
 
 export const validateParams = (
   params: (Partial<Parameter> & { name: string })[],
+  paramIn?: ParamIn,
 ): AjvLikeSchemaObject => {
   const schema: AjvLikeSchemaObject = {
     type: 'object',
@@ -139,12 +140,16 @@ export const validateParams = (
       continue
     }
 
+    // Node lowercases incoming header names.
+    const isHeader = paramIn === 'header' || param.in === 'header'
+    const propertyName = isHeader ? param.name.toLowerCase() : param.name
+
     // Copy the param schema so AJV cannot mutate a shared Parameter object
     // across routes during compilation.
-    schema.properties[param.name] = { ...param.schema }
+    schema.properties[propertyName] = { ...param.schema }
 
     if (param.required) {
-      required.add(param.name)
+      required.add(propertyName)
     }
   }
 
@@ -174,7 +179,7 @@ export const validateBuilder =
       }
 
       const paramIn = params[0].in
-      const builtSchema = validateParams(params)
+      const builtSchema = validateParams(params, paramIn)
       schema[paramIn] = builtSchema
       const validator = v.compile(builtSchema)
 
