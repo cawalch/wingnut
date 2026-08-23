@@ -166,6 +166,44 @@ describe('validateParams', () => {
     expect(result.properties?.offset).not.toBe(sharedSchema)
     expect(result.properties?.limit).toEqual(sharedSchema)
   })
+
+  it('should lowercase mixed-case header param names', () => {
+    const params: (Partial<Parameter> & { name: string })[] = [
+      {
+        in: 'header',
+        name: 'X-API-Key',
+        required: true,
+        schema: { type: 'string' },
+      },
+      { in: 'header', name: 'Content-Type', schema: { type: 'string' } },
+    ]
+    const result = validateParams(params, 'header')
+    expect(result).toStrictEqual({
+      type: 'object',
+      properties: {
+        'x-api-key': { type: 'string' },
+        'content-type': { type: 'string' },
+      },
+      required: ['x-api-key'],
+    })
+    // The authored names on the Parameter objects must stay untouched so
+    // emitted OpenAPI docs can still present the mixed-case name.
+    expect(params[0].name).toBe('X-API-Key')
+  })
+
+  it('should leave non-header param names untouched', () => {
+    const params: (Partial<Parameter> & { name: string })[] = [
+      {
+        in: 'query',
+        name: 'API_Key',
+        required: true,
+        schema: { type: 'string' },
+      },
+    ]
+    const result = validateParams(params, 'query')
+    expect(result.properties?.API_Key).toBeDefined()
+    expect(result.required).toEqual(['API_Key'])
+  })
 })
 
 describe('param', () => {
@@ -2263,6 +2301,85 @@ describe('headerParam', () => {
     const response = await request(app)
       .get('/api/test')
       .set('x-custom-header', 'abc') // No header set
+    expect(response.status).toBe(400)
+    expect(response.body.err).toBe('WingnutValidationError')
+    expect(response.body.context).toBeDefined() // Check that context is provided
+  })
+
+  it('should validate a mixed-case required header present in the request', async () => {
+    const { route, paths, controller } = wingnut(ajv)
+    const handler = (req: Request, res: Response) => {
+      res.status(200).json(req.headers)
+    }
+    const api = path(
+      '/test',
+      getMethod({
+        parameters: [
+          headerParam({
+            name: 'X-API-Key',
+            schema: { type: 'string', minLength: 1 },
+            required: true,
+          }),
+        ],
+        middleware: [handler],
+      }),
+    )
+    const app = express()
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (router: Router) => route(router, api),
+      }),
+    )
+    app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+      if (err instanceof ValidationError) {
+        res.status(400).send({ err: err.message, context: err.context })
+      }
+    })
+
+    // Node lowercases incoming headers; authored name stays mixed-case.
+    const response = await request(app)
+      .get('/api/test')
+      .set('x-api-key', 'secret')
+    expect(response.status).toBe(200)
+    // The authored OpenAPI parameter name is preserved for emitted docs.
+    expect(api['/test'].get?.parameters?.[0]?.name).toBe('X-API-Key')
+  })
+
+  it('should fail validation when a mixed-case required header is missing', async () => {
+    const { route, paths, controller } = wingnut(ajv)
+    const handler = (req: Request, res: Response) => {
+      res.status(200).json(req.headers)
+    }
+    const api = path(
+      '/test',
+      getMethod({
+        parameters: [
+          headerParam({
+            name: 'X-API-Key',
+            schema: { type: 'string', minLength: 1 },
+            required: true,
+          }),
+        ],
+        middleware: [handler],
+      }),
+    )
+    const app = express()
+    paths(
+      app,
+      controller({
+        prefix: '/api',
+        route: (router: Router) => route(router, api),
+      }),
+    )
+    app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+      if (err instanceof ValidationError) {
+        res.status(400).send({ err: err.message, context: err.context })
+      }
+    })
+
+    const response = await request(app).get('/api/test') // Header not sent
     expect(response.status).toBe(400)
     expect(response.body.err).toBe('WingnutValidationError')
     expect(response.body.context).toBeDefined() // Check that context is provided
