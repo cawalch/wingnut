@@ -16,6 +16,15 @@ Install wingnut using `npm i wingnut`, or `pnpm i wingnut`, or `yarn i wingnut`.
 1. Express.js - `npm i express`
 2. Ajv - `npm i ajv`
 
+**Express compatibility:** Wingnut supports Express 4 (>= 4.18.2) and Express 5. The
+peer dependency range is `^4.18.2 || ^5.0.0`, so either major version installs without
+peer warnings. The runtime is Express-version agnostic — Wingnut only uses request
+`query`/`params`/`body` extraction and standard middleware types, and ships no Express
+imports at runtime (types only, elided at build). The library is developed and tested
+against Express 5 types (the stricter of the two), which is a compatibility superset:
+express-5 type usage typechecks cleanly under `@types/express@4` as well. If you hit a
+type error on Express 4 that does not reproduce on Express 5, please open an issue.
+
 ## Usage
 
 ```typescript

@@ -57,6 +57,51 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   # ──────────────────────────────────────────────────────────────────────────
+  # express-compat: verify the supported peer range (Express 4 and 5).
+  # Runs typecheck + the full test suite against each Express major with
+  # matching @types/express, so a type-level or behavioral regression on
+  # either major fails CI. Runs in parallel with build; does not gate publish.
+  #
+  # ──────────────────────────────────────────────────────────────────────────
+  express-compat:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - express: "^4.18.2"
+            types-express: "^4"
+          - express: "^5.0.0"
+            types-express: "^5"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Swap in the matrix's Express major + matching types (devDeps only;
+      # the lockfile churn is confined to this throwaway CI checkout).
+      - name: Install Express ${{ matrix.express }} peer candidate
+        run: pnpm add -D express@${{ matrix.express }} @types/express@${{ matrix.types-express }}
+
+      - name: Type-check against Express ${{ matrix.express }}
+        run: pnpm typecheck
+
+      - name: Run test suite against Express ${{ matrix.express }}
+        run: pnpm test:no-watch
+
+  # ──────────────────────────────────────────────────────────────────────────
   # dependency-review: block PRs that introduce known-vulnerable or
   # low-Scorecard dependencies. Runs on pull requests only.
   # ──────────────────────────────────────────────────────────────────────────
