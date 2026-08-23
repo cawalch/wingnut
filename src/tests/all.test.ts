@@ -8,7 +8,14 @@ import express, {
 } from 'express'
 import request from 'supertest'
 import { assert, beforeEach, describe, expect, it, vi } from 'vitest'
-import { app, createSchemaCache, headerParam, path, wingnut } from '../lib'
+import {
+  app,
+  createSchemaCache,
+  createWingnutAjv,
+  headerParam,
+  path,
+  wingnut,
+} from '../lib'
 import { ValidationError, WingnutError } from '../lib/errors'
 import {
   allScopes,
@@ -74,6 +81,83 @@ describe('app', () => {
     }
     const result = app(appObject)
     expect(result).toBe(appObject)
+  })
+})
+
+describe('createWingnutAjv', () => {
+  it('coerces string query/path values to their schema type', () => {
+    const ajv = createWingnutAjv()
+    const valid = ajv.compile({
+      type: 'object',
+      properties: { limit: { type: 'integer', minimum: 1 } },
+    })
+    expect(valid({ limit: '42' })).toBe(true)
+    expect(valid({ limit: '0' })).toBe(false)
+  })
+
+  it('enables ajv-formats by default', () => {
+    const ajv = createWingnutAjv()
+    const valid = ajv.compile({
+      type: 'object',
+      properties: { email: { type: 'string', format: 'email' } },
+    })
+    expect(valid({ email: 'a@b.co' })).toBe(true)
+    expect(valid({ email: 'not-an-email' })).toBe(false)
+  })
+
+  it('collects all errors, not just the first', () => {
+    const ajv = createWingnutAjv()
+    const valid = ajv.compile({
+      type: 'object',
+      properties: {
+        a: { type: 'integer' },
+        b: { type: 'integer' },
+      },
+      required: ['a', 'b'],
+    })
+    expect(valid({ a: 'x', b: 'y' })).toBe(false)
+    expect(valid.errors?.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('formats: false falls back to plain AJV defaults', () => {
+    const ajv = createWingnutAjv({ formats: false })
+    const valid = ajv.compile({
+      type: 'object',
+      properties: { limit: { type: 'integer', minimum: 1 } },
+    })
+    expect(valid({ limit: '42' })).toBe(true)
+    // A `format` keyword with formats disabled is a standard AJV strict error.
+    expect(() =>
+      ajv.compile({
+        type: 'object',
+        properties: { email: { type: 'string', format: 'email' } },
+      }),
+    ).toThrow()
+  })
+
+  it('feeds wingnut() so a string integer query param validates', async () => {
+    const { route, paths, controller } = wingnut(createWingnutAjv())
+    const handler = (_req: Request, res: Response) =>
+      res.status(200).json({ ok: true })
+    const api = path(
+      '/test',
+      getMethod({
+        parameters: [
+          queryParam({
+            name: 'limit',
+            schema: { type: 'integer', minimum: 1 },
+          }),
+        ],
+        middleware: [handler],
+      }),
+    )
+    const app = express()
+    paths(
+      app,
+      controller({ prefix: '/api', route: (r: Router) => route(r, api) }),
+    )
+    const response = await request(app).get('/api/test').query({ limit: '5' })
+    expect(response.status).toBe(200)
   })
 })
 

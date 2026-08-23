@@ -33,6 +33,7 @@ import { ValidationError } from './errors'
 
 // Layer 1 scheme builders (bearerAuth / apiKey / oauth2). Type-only import of
 // `Security` is erased, so there is no runtime cycle between the two modules.
+export * from './ajv'
 export * from './security'
 
 export type AppRoute = { paths: PathItem[]; router: Router }

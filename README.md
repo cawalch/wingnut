@@ -15,18 +15,38 @@ Install wingnut using `npm i wingnut`, or `pnpm i wingnut`, or `yarn i wingnut`.
 
 1. Express.js - `npm i express`
 2. Ajv - `npm i ajv`
+3. Ajv Formats (optional) - `npm i ajv-formats`
 
 **Express compatibility:** supports Express 4 (>= 4.18.2) and Express 5 (`^4.18.2 || ^5.0.0`).
+
+## Recommended AJV setup
+
+Use the exported `createWingnutAjv()` helper instead of a bare `new Ajv()`. It applies the
+config OpenAPI users almost always want:
+
+- `coerceTypes: true` — Express hands query/path/header params to you as **strings**, so a
+  `{ type: "integer" }` param only validates once AJV coerces `"42"` to a number.
+- `allErrors: true` — report every failing field, not just the first.
+- `formats: true` — installs [`ajv-formats`](https://github.com/ajv-validator/ajv-formats) so
+  `format: "uuid" | "email" | "date-time" | ...` actually validates. (Install `ajv-formats`
+  to use the default; pass `{ formats: false }` to opt out.)
+
+```typescript
+import { createWingnutAjv } from "wingnut";
+
+const ajv = createWingnutAjv(); // = new Ajv({ coerceTypes: true, allErrors: true }) + ajv-formats
+```
+
+Bring-your-own-AJV still works: pass any AJV instance (with the options you need) to `wingnut(ajv)`.
 
 ## Usage
 
 ```typescript
 import express, { Express, Router, Request, Response } from "express";
-import Ajv from "ajv";
 
-import { wingnut, queryParam, getMethod, path, ParamSchema } from "wingnut";
+import { createWingnutAjv, wingnut, queryParam, getMethod, path, ParamSchema } from "wingnut";
 
-const ajv = new Ajv();
+const ajv = createWingnutAjv();
 
 const { route, paths, controller } = wingnut(ajv);
 
@@ -492,12 +512,10 @@ type Body = WnDataType<{
 
 ```typescript
 import express from 'express';
-import Ajv from 'ajv';
-import { PathItem, wingnut, securitySchemes, Security } from 'wingnut';
+import { PathItem, createWingnutAjv, wingnut, securitySchemes, Security } from 'wingnut';
 import swaggerUI from 'swagger-ui-express';
 
-const ajv = new Ajv();
-ajv.opts.coerceTypes = true;
+const ajv = createWingnutAjv();
 
 // `auth` is the Security built by bearerAuth() in "Secure Routes with Scheme Builders"
 const securities: Security[] = [auth];
