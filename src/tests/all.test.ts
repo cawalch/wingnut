@@ -15,6 +15,8 @@ import {
   allScopesWrapper,
   apiKey,
   asyncGetMethod,
+  asyncHeadMethod,
+  asyncOptionsMethod,
   asyncPostMethod,
   asyncWrapper,
   authPathOp,
@@ -22,13 +24,18 @@ import {
   both,
   getMethod,
   groupByParamIn,
+  headMethod,
+  isHttpMethod,
   oauth2,
+  optionsMethod,
+  patchMethod,
   postMethod,
   queryParam,
   Security,
   scope,
   scopeWrapper,
   securitySchemes,
+  traceMethod,
   validateBuilder,
   validateParams,
 } from '../lib/index'
@@ -37,6 +44,7 @@ import {
   Parameter,
   ParamIn,
   ParamType,
+  PathObject,
   ScopeHandler,
   ScopeObject,
 } from '../types/open-api-3'
@@ -2801,5 +2809,152 @@ describe('createSchemaCache', () => {
     expect(stats.hits).toBe(0)
     expect(stats.misses).toBe(3)
     expect(stats.hitRate).toBe(0)
+  })
+})
+
+describe('HTTP methods and path-level metadata', () => {
+  it('isHttpMethod recognizes every supported method and rejects metadata keys', () => {
+    for (const m of [
+      'get',
+      'post',
+      'put',
+      'patch',
+      'delete',
+      'options',
+      'head',
+      'trace',
+    ]) {
+      expect(isHttpMethod(m)).toBe(true)
+    }
+    for (const key of ['summary', 'description', 'servers', 'parameters']) {
+      expect(isHttpMethod(key)).toBe(false)
+    }
+  })
+
+  it('registers patch, options, head, and trace routes on Express', async () => {
+    const { route } = wingnut(ajv)
+    const rtr = Router()
+    route(
+      rtr,
+      path(
+        '/widget',
+        patchMethod({
+          middleware: [
+            (_req: Request, res: Response) => res.status(200).send('patched'),
+          ],
+        }),
+        headMethod({
+          middleware: [(_req: Request, res: Response) => res.status(204).end()],
+        }),
+        optionsMethod({
+          middleware: [
+            (_req: Request, res: Response) => res.status(200).send('options'),
+          ],
+        }),
+        traceMethod({
+          middleware: [
+            (_req: Request, res: Response) => res.status(200).send('traced'),
+          ],
+        }),
+      ),
+    )
+    const app = express()
+    app.use(rtr)
+
+    expect((await request(app).patch('/widget')).status).toBe(200)
+    expect((await request(app).head('/widget')).status).toBe(204)
+    expect((await request(app).options('/widget')).status).toBe(200)
+    expect((await request(app).trace('/widget')).status).toBe(200)
+  })
+
+  it('registers async variants for head and options', async () => {
+    const { route } = wingnut(ajv)
+    const rtr = Router()
+    route(
+      rtr,
+      path(
+        '/widget',
+        asyncHeadMethod({
+          middleware: [
+            async (_req: Request, res: Response) => res.status(204).end(),
+          ],
+        }),
+        asyncOptionsMethod({
+          middleware: [
+            async (_req: Request, res: Response) =>
+              res.status(200).send('options'),
+          ],
+        }),
+      ),
+    )
+    const app = express()
+    app.use(rtr)
+
+    expect((await request(app).head('/widget')).status).toBe(204)
+    expect((await request(app).options('/widget')).status).toBe(200)
+  })
+
+  it('does not attempt route registration for path-level metadata', () => {
+    const { route } = wingnut(ajv)
+    const pitem = path(
+      '/widget',
+      {
+        summary: 'Widget endpoint',
+        description: 'Everything about a widget',
+        parameters: [queryParam({ name: 'limit', schema: { type: 'number' } })],
+      },
+      getMethod({
+        middleware: [
+          (_req: Request, res: Response) => res.status(200).send('ok'),
+        ],
+      }),
+    )
+    const rtr = Router()
+    // Pre-fix this blew up: a path-level `parameters` array was treated as
+    // an operation and turned into middleware for a `router.parameters(...)`
+    // call that does not exist.
+    const { router, paths: emitted } = route(rtr, pitem)
+    expect(router.stack.length).toBe(1)
+    expect(
+      (router.stack[0].route as unknown as { methods: Record<string, boolean> })
+        ?.methods.get,
+    ).toBe(true)
+    // metadata survives into the emitted spec untouched
+    expect(emitted[0]['/widget'].summary).toBe('Widget endpoint')
+    expect(emitted[0]['/widget'].description).toBe('Everything about a widget')
+  })
+
+  it('ignores metadata keys when tracking duplicate routes across path items', () => {
+    const { route, paths, controller } = wingnut(ajv)
+    const handler = (_req: Request, res: Response) => res.status(200).send('ok')
+    const ctrl = controller({
+      prefix: '/a',
+      route: (r: Router) =>
+        route(
+          r,
+          path('/x', { summary: 'X' }, getMethod({ middleware: [handler] })),
+          path('/x', { summary: 'X' }, postMethod({ middleware: [handler] })),
+        ),
+    })
+    // Pre-fix the shared `summary` key registered twice under the same path
+    // and tripped the duplicate-route guard.
+    const out = paths(Router(), ctrl)
+    expect(out['/a/x'].get).toBeDefined()
+    expect(out['/a/x'].post).toBeDefined()
+  })
+
+  it('passes path-level metadata through authPathOp untouched', () => {
+    const auth: Security = {
+      name: 'auth',
+      forbidden: (_req, res) => res.status(403).end(),
+      scopes: { admin: () => true },
+    }
+    const po: PathObject = {
+      summary: 'Admin only',
+      get: { middleware: [] },
+    }
+    const out = authPathOp(scope(auth, 'admin'))(po)
+    expect(out.summary).toBe('Admin only')
+    expect(out.get?.security).toEqual([{ auth: ['admin'] }])
   })
 })
