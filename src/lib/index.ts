@@ -14,6 +14,7 @@ import {
 import {
   AppObject,
   AuthedRequest,
+  ContentItem,
   HttpMethod,
   inMap,
   MediaSchemaItem,
@@ -29,7 +30,7 @@ import {
   SecuritySchemeObject,
   SecuritySchemesObject,
 } from '../types/open-api-3'
-import { ValidationError } from './errors'
+import { UnsupportedMediaTypeError, ValidationError } from './errors'
 
 // Layer 1 scheme builders (bearerAuth / apiKey / oauth2). Type-only import of
 // `Security` is erased, so there is no runtime cycle between the two modules.
@@ -190,6 +191,76 @@ export const validateBuilder =
     return { handlers, schema }
   }
 
+/**
+ * Content-type-aware request-body validation handler.
+ *
+ * Picks the AJV validator for the request's actual `Content-Type` (via
+ * `req.is`) instead of guessing once at route-build time:
+ *
+ * - Matches the declared media types exactly, including suffix wildcards
+ *   such as `application/*+json` or vendor types like
+ *   `application/vnd.api+json`.
+ * - When no declared type matches, falls back to `application/json`, then
+ *   `application/x-www-form-urlencoded` — the legacy build-time default —
+ *   preserving existing behavior for specs that declare either of those.
+ * - When nothing matches and no default is declared, calls
+ *   `next(new UnsupportedMediaTypeError(...))`; error handlers should map
+ *   its `status` to HTTP 415.
+ *
+ * Validators for all declared media types are compiled at route-build
+ * time (through the shared schema cache), so invalid schemas still fail
+ * at startup as before.
+ */
+const contentAwareBodyHandler = (
+  content: ContentItem,
+  compile: (schema: ParamSchema) => AjvLikeValidateFunction,
+): RequestHandler => {
+  const mediaTypes = Object.keys(content)
+  const validators: Record<string, AjvLikeValidateFunction> = {}
+  for (const mediaType of mediaTypes) {
+    validators[mediaType] = compile(content[mediaType].schema)
+  }
+
+  const defaultMediaType = content['application/json']
+    ? 'application/json'
+    : content['application/x-www-form-urlencoded']
+      ? 'application/x-www-form-urlencoded'
+      : undefined
+
+  return (req, _res, next) => {
+    // `req.is` returns the request's actual content type (e.g.
+    // `application/hal+json`), so resolve it back to the declared key
+    // instead of using the return value directly.
+    let mediaType: string | undefined
+    for (const declared of mediaTypes) {
+      if (req.is(declared)) {
+        mediaType = declared
+        break
+      }
+    }
+
+    mediaType ??= defaultMediaType
+
+    if (!mediaType) {
+      return next(
+        new UnsupportedMediaTypeError(
+          `Unsupported Content-Type: ${req.headers['content-type'] ?? '(none)'}`,
+        ),
+      )
+    }
+
+    const validator = validators[mediaType]
+    if (!validator(req.body)) {
+      return next(
+        new ValidationError(VALIDATION_ERROR_MESSAGE, {
+          cause: validator.errors,
+        }),
+      )
+    }
+    return next()
+  }
+}
+
 // Reuse error message string to reduce allocations
 const VALIDATION_ERROR_MESSAGE = 'WingnutValidationError'
 
@@ -299,18 +370,25 @@ export const wingnut = (ajv: AjvLike) => {
   ) => {
     const wrapper = pathOp.wrapper ?? ((cb) => cb)
 
-    const requestBodyContent =
-      pathOp.requestBody?.content?.['application/json'] ??
-      pathOp.requestBody?.content?.['application/x-www-form-urlencoded']
+    // Media type entries without a schema (e.g. examples-only — legal in
+    // OpenAPI) are skipped: the previous build-time behavior also skipped
+    // body validation when the picked entry had no schema.
+    const rawContent = pathOp.requestBody?.content
+    const bodyContent = rawContent
+      ? Object.fromEntries(
+          Object.entries(rawContent).filter(
+            ([, entry]) => entry?.schema !== undefined,
+          ),
+        )
+      : undefined
 
     const middle = [
       ...(pathOp.scope ? handleScopes(pathOp.scope, wrapper) : []),
-      ...(requestBodyContent?.schema
+      ...(bodyContent && Object.keys(bodyContent).length > 0
         ? [
             wrapper(
-              validateHandler(
-                cachedAjv.compile(requestBodyContent.schema),
-                'body',
+              contentAwareBodyHandler(bodyContent, (schema) =>
+                cachedAjv.compile(schema),
               ),
             ),
           ]

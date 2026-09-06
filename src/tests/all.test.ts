@@ -16,7 +16,11 @@ import {
   path,
   wingnut,
 } from '../lib'
-import { ValidationError, WingnutError } from '../lib/errors'
+import {
+  UnsupportedMediaTypeError,
+  ValidationError,
+  WingnutError,
+} from '../lib/errors'
 import {
   allScopes,
   allScopesWrapper,
@@ -3153,5 +3157,351 @@ describe('HTTP methods and path-level metadata', () => {
     const out = authPathOp(scope(auth, 'admin'))(po)
     expect(out.summary).toBe('Admin only')
     expect(out.get?.security).toEqual([{ auth: ['admin'] }])
+  })
+})
+
+describe('content-type aware body validation', () => {
+  const ok = (_req: Request, res: Response) => {
+    res.status(200).json({ success: true })
+  }
+
+  const errorHandler = (
+    err: Error,
+    _req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    if (err instanceof UnsupportedMediaTypeError) {
+      res.status(415).json({ name: err.name, message: err.message })
+      return
+    }
+    res.status(400).json({ name: err.name })
+    next()
+  }
+
+  it('validates each media type with its own schema on one operation', async () => {
+    const app = express()
+    app.use(express.json())
+    app.use(express.urlencoded())
+    const { route, paths, controller } = wingnut(ajv)
+
+    const ctrl = controller({
+      prefix: '/multi',
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            '/',
+            postMethod({
+              requestBody: {
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: { name: { type: 'string' } },
+                      required: ['name'],
+                    },
+                  },
+                  'application/x-www-form-urlencoded': {
+                    schema: {
+                      type: 'object',
+                      properties: { email: { type: 'string' } },
+                      required: ['email'],
+                    },
+                  },
+                },
+              },
+              middleware: [ok, errorHandler],
+            }),
+          ),
+        ),
+    })
+    paths(app, ctrl)
+
+    // JSON request validates against the JSON schema
+    const jsonOk = await request(app).post('/multi').send({ name: 'x' })
+    expect(jsonOk.status).toBe(200)
+
+    // JSON payload lacking the JSON-required field fails, even though it
+    // carries the form field
+    const jsonBad = await request(app).post('/multi').send({ email: 'a@b.c' })
+    expect(jsonBad.status).toBe(400)
+    expect(jsonBad.body.name).toBe('ValidationError')
+
+    // Form request validates against the form schema
+    const formOk = await request(app)
+      .post('/multi')
+      .type('form')
+      .send({ email: 'a@b.c' })
+    expect(formOk.status).toBe(200)
+
+    // Form payload lacking the form-required field fails
+    const formBad = await request(app)
+      .post('/multi')
+      .type('form')
+      .send({ name: 'x' })
+    expect(formBad.status).toBe(400)
+    expect(formBad.body.name).toBe('ValidationError')
+  })
+
+  it('validates vendor JSON media types declared in the spec', async () => {
+    const app = express()
+    app.use(
+      express.json({
+        type: ['application/json', 'application/vnd.api+json'],
+      }),
+    )
+    const { route, paths, controller } = wingnut(ajv)
+
+    const ctrl = controller({
+      prefix: '/vnd',
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            '/',
+            postMethod({
+              requestBody: {
+                content: {
+                  'application/vnd.api+json': {
+                    schema: {
+                      type: 'object',
+                      properties: { data: { type: 'object' } },
+                      required: ['data'],
+                    },
+                  },
+                },
+              },
+              middleware: [ok, errorHandler],
+            }),
+          ),
+        ),
+    })
+    paths(app, ctrl)
+
+    const vnd = await request(app)
+      .post('/vnd')
+      .type('application/vnd.api+json')
+      .send({ data: {} })
+    expect(vnd.status).toBe(200)
+
+    // Plain application/json is not declared and no json default exists -> 415
+    const plain = await request(app)
+      .post('/vnd')
+      .type('application/json')
+      .send({ data: {} })
+    expect(plain.status).toBe(415)
+    expect(plain.body.name).toBe('UnsupportedMediaTypeError')
+  })
+
+  it('supports application/*+json suffix wildcards', async () => {
+    const app = express()
+    app.use(express.json({ type: 'application/*' }))
+    const { route, paths, controller } = wingnut(ajv)
+
+    const ctrl = controller({
+      prefix: '/wild',
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            '/',
+            postMethod({
+              requestBody: {
+                content: {
+                  'application/*+json': {
+                    schema: {
+                      type: 'object',
+                      properties: { id: { type: 'string' } },
+                      required: ['id'],
+                    },
+                  },
+                },
+              },
+              middleware: [ok, errorHandler],
+            }),
+          ),
+        ),
+    })
+    paths(app, ctrl)
+
+    const hal = await request(app)
+      .post('/wild')
+      .type('application/hal+json')
+      .send({ id: '1' })
+    expect(hal.status).toBe(200)
+
+    // A non-JSON type is neither declared nor covered by the default -> 415
+    const text = await request(app)
+      .post('/wild')
+      .type('text/plain')
+      .send('id=1')
+    expect(text.status).toBe(415)
+  })
+
+  it('falls back to the legacy JSON default when Content-Type is absent', async () => {
+    const app = express()
+    app.use(express.json())
+    const { route, paths, controller } = wingnut(ajv)
+
+    const ctrl = controller({
+      prefix: '/fallback',
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            '/',
+            postMethod({
+              requestBody: {
+                content: {
+                  'application/json': {
+                    schema: {
+                      type: 'object',
+                      properties: { name: { type: 'string' } },
+                      required: ['name'],
+                    },
+                  },
+                },
+              },
+              middleware: [ok, errorHandler],
+            }),
+          ),
+        ),
+    })
+    paths(app, ctrl)
+
+    // No Content-Type at all: the legacy default (application/json) is used,
+    // so the missing body fails the object schema with a ValidationError
+    // rather than a 415.
+    const noCt = await request(app).post('/fallback')
+    expect(noCt.status).toBe(400)
+    expect(noCt.body.name).toBe('ValidationError')
+  })
+
+  it('reports the missing Content-Type in the 415 error', async () => {
+    const app = express()
+    const { route, paths, controller } = wingnut(ajv)
+
+    const ctrl = controller({
+      prefix: '/xml',
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            '/',
+            postMethod({
+              requestBody: {
+                content: {
+                  'text/xml': {
+                    schema: {
+                      type: 'object',
+                      properties: { id: { type: 'string' } },
+                      required: ['id'],
+                    },
+                  },
+                },
+              },
+              middleware: [ok, errorHandler],
+            }),
+          ),
+        ),
+    })
+    paths(app, ctrl)
+
+    // No Content-Type and no json/urlencoded default -> 415 naming '(none)'
+    const r = await request(app).post('/xml')
+    expect(r.status).toBe(415)
+    expect(r.body.name).toBe('UnsupportedMediaTypeError')
+    expect(r.body.message).toContain('(none)')
+  })
+
+  it('skips media type entries without a schema instead of crashing the build', async () => {
+    const app = express()
+    app.use(express.json({ type: 'application/*' }))
+    app.use(express.urlencoded())
+    const { route, paths, controller } = wingnut(ajv)
+
+    const ctrl = controller({
+      prefix: '/noschema',
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            '/',
+            postMethod({
+              requestBody: {
+                content: {
+                  // Examples-only (schema-less) media type — legal in OpenAPI
+                  'application/json': {
+                    examples: { a: { value: {} } },
+                  } as never,
+                  'application/x-www-form-urlencoded': {
+                    schema: {
+                      type: 'object',
+                      properties: { email: { type: 'string' } },
+                      required: ['email'],
+                    },
+                  },
+                },
+              },
+              middleware: [ok, errorHandler],
+            }),
+          ),
+        ),
+    })
+    // Schema-less entry must not crash route building (previously
+    // `compile(undefined)` threw "schema must be object or boolean").
+    paths(app, ctrl)
+
+    // The schema-less json entry is skipped; the json request falls back to
+    // the declared form schema (legacy default), so a conforming body passes.
+    const js = await request(app)
+      .post('/noschema')
+      .type('application/json')
+      .send({ email: 'a@b.c' })
+    expect(js.status).toBe(200)
+
+    // The sibling entry with a schema is still validated.
+    const formBad = await request(app)
+      .post('/noschema')
+      .type('application/x-www-form-urlencoded')
+      .send({})
+    expect(formBad.status).toBe(400)
+    expect(formBad.body.name).toBe('ValidationError')
+  })
+
+  it('performs no body validation when every content entry lacks a schema', async () => {
+    const app = express()
+    app.use(express.json({ type: 'application/*' }))
+    const { route, paths, controller } = wingnut(ajv)
+
+    const ctrl = controller({
+      prefix: '/onlyexamples',
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            '/',
+            postMethod({
+              requestBody: {
+                content: {
+                  'application/json': {
+                    examples: { a: { value: {} } },
+                  } as never,
+                },
+              },
+              middleware: [ok, errorHandler],
+            }),
+          ),
+        ),
+    })
+    paths(app, ctrl)
+
+    // No schema anywhere -> no body validation middleware (legacy behavior).
+    const any = await request(app)
+      .post('/onlyexamples')
+      .type('application/json')
+      .send({ anything: true })
+    expect(any.status).toBe(200)
   })
 })
