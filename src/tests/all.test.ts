@@ -3505,3 +3505,99 @@ describe('content-type aware body validation', () => {
     expect(any.status).toBe(200)
   })
 })
+
+describe('OpenAPI 3.1 / JSON Schema 2020-12', () => {
+  it('default (3.0) factory validates nullable and type arrays', () => {
+    const ajv = createWingnutAjv()
+    const nullable = ajv.compile({ type: 'string', nullable: true })
+    expect(nullable('x')).toBe(true)
+    expect(nullable(null)).toBe(true)
+    // with coerceTypes, 1 is coerced to '1' and validates; objects never are
+    expect(nullable(1)).toBe(true)
+    expect(nullable({ a: 1 })).toBe(false)
+
+    const union = ajv.compile({ type: ['integer', 'null'] })
+    expect(union(42)).toBe(true)
+    expect(union(null)).toBe(true)
+    expect(union('nope')).toBe(false)
+  })
+
+  it('openapi 3.1 factory validates $defs/$ref and type arrays through a route', async () => {
+    const app = express()
+    app.use(express.json())
+    const { route, paths, controller } = wingnut(
+      createWingnutAjv({ openapi: '3.1' }),
+    )
+
+    const ok = (req: Request, res: Response) => {
+      res.status(200).json({ name: req.body.name })
+    }
+    const fail = (
+      err: Error,
+      _req: Request,
+      res: Response,
+      next: NextFunction,
+    ) => {
+      res.status(400).json({ name: err.name })
+      next()
+    }
+
+    const ctrl = controller({
+      prefix: '/o31',
+      route: (router: Router) =>
+        route(
+          router,
+          path(
+            '/',
+            postMethod({
+              requestBody: {
+                content: {
+                  'application/json': {
+                    schema: {
+                      $defs: {
+                        Name: { type: 'string', minLength: 1 },
+                      },
+                      type: 'object',
+                      properties: {
+                        name: { $ref: '#/$defs/Name' },
+                        count: { type: ['integer', 'null'] },
+                      },
+                      required: ['name'],
+                    },
+                  },
+                },
+              },
+              middleware: [ok, fail],
+            }),
+          ),
+        ),
+    })
+    paths(app, ctrl)
+
+    const okRes = await request(app)
+      .post('/o31')
+      .send({ name: 'ada', count: null })
+    expect(okRes.status).toBe(200)
+    expect(okRes.body).toEqual({ name: 'ada' })
+
+    // $ref target (minLength 1) rejects an empty name
+    const badRef = await request(app).post('/o31').send({ name: '' })
+    expect(badRef.status).toBe(400)
+    expect(badRef.body.name).toBe('ValidationError')
+
+    // 3.1 type array rejects a string count
+    const badUnion = await request(app)
+      .post('/o31')
+      .send({ name: 'ada', count: 'x' })
+    expect(badUnion.status).toBe(400)
+    expect(badUnion.body.name).toBe('ValidationError')
+  })
+
+  it('openapi 3.1 factory resolves cross-schema $refs', () => {
+    const ajv = createWingnutAjv({ openapi: '3.1' })
+    ajv.addSchema({ $id: 'name-schema', type: 'string', minLength: 1 })
+    const valid = ajv.compile({ $ref: 'name-schema' })
+    expect(valid('ada')).toBe(true)
+    expect(valid('')).toBe(false)
+  })
+})
