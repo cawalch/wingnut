@@ -7,6 +7,15 @@ for validation and documentation.
 [![codecov](https://codecov.io/gh/cawalch/wingnut/graph/badge.svg?token=E7LJCNGZET)](https://codecov.io/gh/cawalch/wingnut)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/cawalch/wingnut/badge)](https://scorecard.dev/viewer/?uri=github.com/cawalch/wingnut)
 
+## Node.js support
+
+Wingnut requires **Node.js >= 22** (the current LTS baseline; Node 20 reached end of
+life in April 2026). The published bundle is built with `esbuild --target=node22` and
+type declarations target ES2022, matching this floor. CI runs on Node 22.
+
+Wingnut targets **OpenAPI 3.0** specs. See [issue #145](https://github.com/cawalch/wingnut/issues/145)
+for the discussion of adding an OpenAPI 3.1 / JSON Schema 2020-12 path.
+
 ## Installation
 
 Install wingnut using `npm i wingnut`, or `pnpm i wingnut`, or `yarn i wingnut`.
