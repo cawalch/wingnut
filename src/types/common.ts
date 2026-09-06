@@ -1,4 +1,5 @@
 import { RequestHandler } from 'express'
+import type { ParamType } from './open-api-3'
 
 export type Route = (path: string, ...handler: RequestHandler[]) => void
 
@@ -19,7 +20,8 @@ export type AjvLike = {
 
 export interface AjvLikeSchemaObject extends Record<string, unknown> {
   $id?: string
-  type?: 'object' | 'string' | 'number' | 'array' | 'boolean' | 'integer'
+  /** 3.0: a single type. 3.1 / 2020-12: an array of types, e.g. `['string', 'null']`. */
+  type?: ParamType | readonly ParamType[]
   properties?: Record<string, unknown>
   required?: readonly string[]
 }

@@ -160,13 +160,29 @@ export type ParamType =
   | 'array'
   | 'object'
   | 'boolean'
+  /** JSON Schema 2020-12 / OpenAPI 3.1 `null` type (e.g. `type: ['string', 'null']`). */
+  | 'null'
 
+/**
+ * JSON Schema object used for request data validation.
+ *
+ * Superset of the OpenAPI 3.0 Schema Object and JSON Schema 2020-12
+ * (OpenAPI 3.1) keywords that matter for API request validation:
+ * `nullable` (3.0), `type` arrays and `'null'` (3.1), `$defs`/`$ref`,
+ * `const`, rich `enum`, `not`, and `if`/`then`/`else`. Schemas are compiled
+ * by the injected Ajv instance — see `createWingnutAjv` (`openapi` option)
+ * for which schema dialect is evaluated at runtime.
+ */
 export interface ParamSchema extends Record<string, unknown> {
-  type?: ParamType
+  /** 3.0: a single type. 3.1 / 2020-12: an array of types, e.g. `['string', 'null']`. */
+  type?: ParamType | readonly ParamType[]
   description?: string
   format?: string
   minimum?: number
   maximum?: number
+  exclusiveMinimum?: number | boolean
+  exclusiveMaximum?: number | boolean
+  multipleOf?: number
   example?: unknown
   default?: unknown
   minLength?: number
@@ -175,19 +191,34 @@ export interface ParamSchema extends Record<string, unknown> {
   maxItems?: number
   maxProperties?: number
   minProperties?: number
+  /** OpenAPI 3.0 nullability. 3.1 prefers `type: [..., 'null']`; both validate and infer `T | null`. */
   nullable?: boolean
   required?: readonly string[]
-  enum?: Readonly<number[] | string[]>
+  /** 2020-12: any JSON value (3.0 restricted it to numbers/strings in practice). */
+  enum?: Readonly<unknown[]>
+  /** Constant value the instance must equal. */
+  const?: unknown
+  /** Reference to a schema, e.g. `#/$defs/Address`. Same-document refs resolve with the default Ajv; cross-schema refs need an `ajv/dist/2020` instance (`createWingnutAjv({ openapi: '3.1' })`). */
+  $ref?: string
+  /** JSON Schema 2020-12 local definitions. */
+  $defs?: Record<string, ParamSchema>
+  /** OpenAPI 3.0 local definitions. */
+  definitions?: Record<string, ParamSchema>
   properties?: {
     [key: string]: ParamSchema
   }
-  additionalProperties?: boolean
+  additionalProperties?: boolean | ParamSchema
+  patternProperties?: Record<string, ParamSchema>
   items?: ParamSchema
   pattern?: string
   uniqueItems?: boolean
   oneOf?: ParamSchema[]
   anyOf?: ParamSchema[]
   allOf?: ParamSchema[]
+  not?: ParamSchema
+  if?: ParamSchema
+  then?: ParamSchema
+  else?: ParamSchema
 }
 
 export interface Parameter {

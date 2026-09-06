@@ -13,8 +13,23 @@ Wingnut requires **Node.js >= 22** (the current LTS baseline; Node 20 reached en
 life in April 2026). The published bundle is built with `esbuild --target=node22` and
 type declarations target ES2022, matching this floor. CI runs on Node 22.
 
-Wingnut targets **OpenAPI 3.0** specs. See [issue #145](https://github.com/cawalch/wingnut/issues/145)
-for the discussion of adding an OpenAPI 3.1 / JSON Schema 2020-12 path.
+## OpenAPI version support
+
+Wingnut accepts **both OpenAPI 3.0 and OpenAPI 3.1** specs.
+
+- **Types.** `ParamSchema` is a superset of the 3.0 Schema Object that also covers the
+  JSON Schema 2020-12 keywords used in 3.1: `type` arrays (e.g.
+  `["string", "null"]`), the `"null"` type, `$defs` / `$ref`, `const`, `enum` with
+  any JSON values, `not`, `if` / `then` / `else`, numeric `exclusiveMinimum` /
+  `exclusiveMaximum`, and schema-valued `additionalProperties`.
+- **Runtime.** The default `createWingnutAjv()` is a draft-07 AJV that evaluates 3.0
+  specs; it also accepts and correctly validates the common 3.1 shorthands
+  (`nullable`, `type` arrays, `const`, same-document `$ref`). For full 2020-12
+  semantics — cross-schema `$ref` via `addSchema`, strict dialect checking — use
+  `createWingnutAjv({ openapi: "3.1" })` (AJV 2020) or pass any `ajv/dist/2020`
+  instance to `wingnut(ajv)`.
+- **Nullability.** OpenAPI 3.0 `nullable: true` and 3.1 `type: [..., "null"]` both
+  validate at runtime and both resolve to `T | null` via `WnDataType`.
 
 ## Installation
 
@@ -39,6 +54,9 @@ config OpenAPI users almost always want:
 - `formats: true` — installs [`ajv-formats`](https://github.com/ajv-validator/ajv-formats) so
   `format: "uuid" | "email" | "date-time" | ...` actually validates. (Install `ajv-formats`
   to use the default; pass `{ formats: false }` to opt out.)
+- `openapi: "3.0" | "3.1"` — the schema dialect evaluated at runtime. `"3.0"`
+  (default) is draft-07 AJV; `"3.1"` is AJV 2020 (JSON Schema 2020-12) for full
+  OpenAPI 3.1 specs. See [OpenAPI version support](#openapi-version-support).
 
 ```typescript
 import { createWingnutAjv } from "wingnut";
@@ -535,6 +553,14 @@ type Body = WnDataType<{
 // { name?: string; role?: "admin" | "user"; meta?: Record<string, unknown> }
 //   & { name: string; role: "admin" | "user" }
 //   & { [key: string]: unknown }
+```
+
+3.1-only constructs with no TS equivalent — `$ref`, `not`, and `if` / `then` /
+`else` — resolve to `unknown`. `$ref` targets are resolved by AJV at runtime
+(local `$defs` included);
+
+```typescript
+type Geo = WnDataType<{ $ref: "#/$defs/Geo" }>; // unknown — AJV resolves the ref
 ```
 
 ### Swagger Documentation
