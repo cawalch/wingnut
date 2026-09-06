@@ -66,6 +66,63 @@ const ajv = createWingnutAjv(); // = new Ajv({ coerceTypes: true, allErrors: tru
 
 Bring-your-own-AJV still works: pass any AJV instance (with the options you need) to `wingnut(ajv)`.
 
+## Build-time validators (codegen)
+
+The runtime path compiles every schema with AJV on each cold start. If you want to ship
+**zero AJV at runtime**, generate precompiled, self-contained validators at build time:
+
+```sh
+npx wingnut build --entry src/build.ts --out dist/validators.cjs
+```
+
+Your build entry is a plain function that returns `Record<key, schema>` — typically the same
+object you'd hand to the facade, so the validator keys always match:
+
+```ts
+// src/build.ts
+export const build = () => ({
+  [paramsKey]: paramsSchema,   // from getMethod / wingnut facade
+  [bodyKey]: bodySchema,
+});
+```
+
+Then at runtime use the **thin** entry (it ships no AJV — `require`-able without ajv or
+ajv-formats installed):
+
+```ts
+import { codegenAjvLike, codegenSchemaKey, verifyCodegenMeta } from "wingnut/codegen";
+import express from "express";
+import * as validators from "../dist/validators.cjs";
+import { meta } from "../dist/meta.json";
+
+const { route, paths, controller } = wingnut(codegenAjvLike(validators, meta));
+```
+
+Guarantees and behavior:
+
+- **Byte-parity semantics.** Generated code is AJV's own standalone output, compiled by the
+  identical generator options AJV applies at runtime (`coerceTypes`, `allErrors`, formats,
+  `openapi` dialect). Results, error arrays, and in-place coercion match the live path.
+- **Fail-closed drift.** Validators are looked up by `JSON.stringify(schema)`. If a runtime
+  schema has no precompiled entry — spec changed and you forgot to rebuild — the facade
+  throws `WingnutCodegenError` instead of validating anything.
+- **Stale detection in CI.** `npx wingnut build --check --entry src/build.ts --out dist/validators.cjs`
+  re-runs the capture and exits `3` when the validator key set or generation metadata
+  (AJV version, dialect, options hash) no longer matches the committed artifact.
+- **Cold start.** No AJV module load and no per-schema compilation — only `require` of the
+  generated file (~25 ms → ~8–16 ms measured for a 200-route app; the rest of the startup
+  is Express and your code).
+
+Limitations:
+
+- **Static schemas only.** Schemas computed at request time, or from runtime inputs, are
+  not supported (they would miss the artifact and fail closed).
+- **Canonical generator options.** The thin runtime assumes the `createWingnutAjv()`
+  defaults. Non-default AJV options (e.g. strict mode changes, custom keywords) stay on the
+  runtime-AJV path.
+- **Express stays.** Codegen removes AJV (~2.1 MB transitive) from the deployment, not
+  Express.
+
 ## Usage
 
 ```typescript
