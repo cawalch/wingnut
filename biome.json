@@ -5,6 +5,7 @@
     "ignoreUnknown": false,
     "includes": [
       "**",
+      "!**/coverage/**",
       "!**/dist/**",
       "!**/benchmarks/**",
       "!**/profiler-output/**",

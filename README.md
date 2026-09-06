@@ -166,6 +166,26 @@ postMethod({
 });
 ```
 
+### Content-type dispatch
+
+Wingnut inspects each request's `Content-Type` and validates against the matching media type declared in `content`, instead of picking one type up front:
+
+```typescript
+postMethod({
+  requestBody: {
+    content: {
+      "application/json": { schema: jsonSchema },
+      "application/x-www-form-urlencoded": { schema: formSchema },
+    },
+  },
+});
+```
+
+- A JSON request validates against the `application/json` schema; a form request against the `application/x-www-form-urlencoded` schema.
+- Vendor JSON types (`application/vnd.api+json`) and suffix wildcards (`application/*+json`) are supported wherever the spec allows them. (Your body parser must be configured to parse the media type, e.g. `express.json({ type: [...] })`.)
+- If the request's `Content-Type` matches no declared type, Wingnut falls back to `application/json`, then `application/x-www-form-urlencoded` — the historical default — when one of those is declared. This preserves pre-existing behavior.
+- If nothing matches and no such default is declared, validation fails with `UnsupportedMediaTypeError`; map its `status` (415) in your error handler.
+
 ## Path Param Validation
 
 ```typescript
