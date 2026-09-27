@@ -2,3 +2,7 @@
 coverage
 dist
 node_modules
+
+# codegen spike artifacts (regenerated via spike/codegen/README.md)
+spike/codegen/out/
+spike/codegen/tools/out/

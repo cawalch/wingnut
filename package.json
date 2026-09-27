@@ -4,11 +4,19 @@
   "description": "API validation middleware builder based on Open API V3 specs",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "wingnut": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./codegen": {
+      "types": "./dist/codegen/index.d.ts",
+      "default": "./dist/codegen/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "sideEffects": false,
   "scripts": {
@@ -16,7 +24,7 @@
     "test": "vitest",
     "test:no-watch": "vitest --run",
     "coverage": "vitest run --coverage",
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node22 --minify --tree-shaking=true --external:express --external:ajv --external:ajv-formats --outdir=dist && tsc --project tsconfig.build.json",
+    "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "biome check --diagnostic-level=error",
     "lint:fix": "biome check --fix"
@@ -48,6 +56,9 @@
     "express": "^4.18.2 || ^5.0.0"
   },
   "peerDependenciesMeta": {
+    "ajv": {
+      "optional": true
+    },
     "ajv-formats": {
       "optional": true
     }
