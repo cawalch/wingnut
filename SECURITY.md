@@ -1,5 +1,12 @@
 # Security Policy
 
+## Maintenance status
+
+Wingnut was archived on September 27, 2026 and is no longer maintained.
+**No versions receive security updates**, including the final npm release, 0.5.0.
+Users should migrate to a maintained alternative or take responsibility for
+maintaining their own fork.
+
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in wingnut, please report it
@@ -9,27 +16,16 @@ If you discover a security vulnerability in wingnut, please report it
 - Please include a description of the issue, steps to reproduce, and the
   impact. A proof-of-concept is appreciated but not required.
 
-We aim to acknowledge reports within **72 hours** and to ship or disclose
-a fix within **30 days** for high-severity issues. Please do not publicly
-disclose the vulnerability before a fix is released.
-
-## Supported Versions
-
-Only the latest released version receives security updates.
-
-| Version | Supported |
-|---------|-----------|
-| latest (0.5.x) | ✅ |
-| older          | ❌ |
+The contact address remains available for historical reports, but there is no
+guaranteed response time or commitment to provide a fix. The former response and
+remediation targets no longer apply.
 
 ## Supply-Chain Posture
 
-This project publishes results to the OpenSSF Scorecard. The current
-posture and per-check breakdown are visible at:
+Historical OpenSSF Scorecard results may remain available at:
 https://scorecard.dev/viewer/?uri=github.com/cawalch/wingnut
 
-Published npm packages ship with build provenance and SBOM attestations
-under trusted publishing (OIDC); verify with:
+Where available, historical release attestations can be verified with:
 
 ```sh
 gh attestation verify <package>.tgz --repo cawalch/wingnut

@@ -1,5 +1,14 @@
 # Wingnut
 
+> **Archived — September 27, 2026.** Wingnut is no longer maintained. No further
+> features, bug fixes, or security updates are planned. This repository is retained
+> for reference; existing npm releases remain available, but new projects should
+> choose a maintained alternative.
+>
+> The last npm release is **0.5.0** (June 15, 2026). The documentation below reflects
+> the final `main` branch and includes changes that were never published to npm.
+> For the published version, see the [v0.5.0 documentation](https://github.com/cawalch/wingnut/tree/v0.5.0#readme).
+
 A node.js library to build express.js APIs using [OpenAPI V3 specs](https://swagger.io/specification/)
 for validation and documentation.
 
